@@ -124,13 +124,17 @@ export async function generateScript(quote) {
 
   const prompt = buildPrompt(quote);
 
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': 'https://github.com/IMNotBoT3/anime-shorts-pipeline',
+  };
+
+  console.log(`   API key: ${apiKey.slice(0, 8)}...${apiKey.slice(-4)} (${apiKey.length} chars)`);
+
   const res = await fetch(OPENROUTER_API, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/IMNotBoT3/anime-shorts-pipeline',
-    },
+    headers,
     body: JSON.stringify({
       model: MODEL,
       messages: [{ role: 'user', content: prompt }],
