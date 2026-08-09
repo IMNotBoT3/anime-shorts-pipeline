@@ -24,17 +24,44 @@ export async function uploadToYouTube(videoPath, meta) {
   const yt = google.youtube({ version: 'v3', auth });
 
   const categoryId = meta.categoryId || config.channel?.category || '24';
-  const tags = meta.tags?.length ? meta.tags : config.channel?.defaultTags || [];
 
-  const title = meta.title.includes('#shorts') || meta.title.includes('#Shorts')
-    ? meta.title : `${meta.title} #shorts`.slice(0, 100);
+  // Sanitize tags: YouTube rejects tags with #, special chars, or >30 chars each
+  const rawTags = meta.tags?.length ? meta.tags : config.channel?.defaultTags || [];
+  const tags = rawTags
+    .map(t => String(t)
+      .replace(/^#/, '')              // strip leading #
+      .replace(/[^a-zA-Z0-9\s\-]/g, '') // only letters, numbers, spaces, hyphens
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+    )
+    .filter(t => t.length >= 2 && t.length <= 30)
+    .filter(t => !/[<>"{}|\\^`]/.test(t)) // extra safety: reject any weird chars
+    .filter((t, i, arr) => arr.indexOf(t) === i) // dedupe
+    .slice(0, 30);
+
+  const title = meta.longForm
+    ? (meta.title || 'Anime Compilation').replace(/#shorts|#Shorts/g, '').trim().slice(0, 100)
+    : (meta.title || 'Anime Quote').replace(/#shorts|#Shorts/g, '').trim().slice(0, 95) + ' #shorts';
+
+  // YouTube rejects more than 15 hashtags in description, and some LLM-generated
+  // ones contain invalid chars. Keep it to max 5 clean ones.
+  const cleanHashtags = (meta.hashtags || [])
+    .map(h => h.startsWith('#') ? h : `#${h}`)
+    .map(h => h.replace(/[^#a-zA-Z0-9]/g, ''))
+    .filter(h => h.length > 2 && h.length < 30)
+    .slice(0, 5);
 
   const description = [
-    meta.description || '',
+    (meta.description || '').slice(0, 4500),
     '',
-    (meta.hashtags || []).join(' '),
+    cleanHashtags.join(' '),
   ].join('\n').trim();
 
+  console.log(`   Tags (${tags.length}): ${tags.slice(0, 5).join(', ')}...`);
+  console.log(`   Title: ${title.slice(0, 60)}`);
+  console.log(`   Hashtags in desc: ${JSON.stringify(meta.hashtags?.slice(0, 5))}`);
+  console.log(`   Desc (first 100): ${description.slice(0, 100)}`);
   console.log(`   Uploading: "${title.slice(0, 60)}"`);
 
   try {

@@ -338,6 +338,7 @@ async function main() {
       const meta = {
         ...(script.youtube || {}),
         categoryId: '24', // Entertainment
+        longForm: true,   // Don't append #shorts — this is a regular video
       };
       const videoId = await uploadToYouTube(outputPath, meta);
 
