@@ -4,8 +4,7 @@
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,37 +17,31 @@ const PITCH = config.edgeTts?.pitch || '-2Hz';
 
 /**
  * Generate an MP3 from text using edge-tts.
- * Returns the output file path.
  */
 export async function generateVoiceover(text, outputPath, voice) {
-  const args = [
+  // Use --pitch=VALUE format to avoid argparse treating negative values as flags
+  const pyArgs = ['-m', 'edge_tts',
     '--voice', voice,
     '--rate', RATE,
-    '--pitch', PITCH.startsWith('-') ? `${PITCH}` : PITCH,
+    `--pitch=${PITCH}`,
     '--text', text,
     '--write-media', outputPath,
   ];
 
   try {
-    // Try edge-tts directly first, then as Python module
-    try {
-      await execFileAsync('edge-tts', args, { timeout: 30000 });
-    } catch {
-      // edge-tts --pitch=-2Hz (use = to avoid argument parsing issue with negative values)
-      const pyArgs = ['-m', 'edge_tts',
-        '--voice', voice,
-        '--rate', RATE,
-        `--pitch=${PITCH}`,
-        '--text', text,
-        '--write-media', outputPath,
-      ];
-      await execFileAsync('python', pyArgs, { timeout: 30000 });
-    }
+    // Try edge-tts CLI directly
+    await execFileAsync('edge-tts', [
+      '--voice', voice, '--rate', RATE, `--pitch=${PITCH}`,
+      '--text', text, '--write-media', outputPath,
+    ], { timeout: 30000 });
+  } catch {
+    // Fall back to python -m edge_tts
+    await execFileAsync('python', pyArgs, { timeout: 30000 });
+  }
 
   if (!existsSync(outputPath)) {
     throw new Error(`edge-tts did not produce ${outputPath}`);
   }
-
   return outputPath;
 }
 
