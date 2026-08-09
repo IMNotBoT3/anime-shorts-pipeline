@@ -68,7 +68,7 @@ export async function generateVoiceover(text, outputPath, voice) {
     }
   } catch (err) {
     // Some voices fail on certain texts — try fallback voice
-    const fallback = gender === 'female' ? VOICES.female_strong : VOICES.male_power;
+    const fallback = 'en-US-AndrewMultilingualNeural';
     if (voice !== fallback) {
       console.log(`   ⚠ Voice ${voice} failed, trying ${fallback}`);
       const fbArgs = ['-m', 'edge_tts',
