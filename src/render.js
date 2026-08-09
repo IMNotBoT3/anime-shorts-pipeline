@@ -62,11 +62,7 @@ export async function renderVideo(scenes, outputPath) {
     // Audio input
     inputs.push('-i', s.audioPath);
 
-    // 1) Ken Burns with ALTERNATING directions to prevent visual monotony:
-    //    Scene 0: zoom in (center)
-    //    Scene 1: zoom in from top-left
-    //    Scene 2: zoom in from bottom-right
-    //    This creates visual variety that fights gradual-decline attention loss.
+    // 1) Ken Burns with ALTERNATING directions to prevent visual monotony
     const zoomX = i === 0 ? 'iw/2-(iw/zoom/2)'
       : i === 1 ? 'iw/4-(iw/zoom/4)'
         : '3*iw/4-(3*iw/zoom/4)';
@@ -75,7 +71,7 @@ export async function renderVideo(scenes, outputPath) {
         : '3*ih/4-(3*ih/zoom/4)';
 
     filterParts.push(
-      `[${idx}:v]scale=1440:2560,`
+      `[${idx}:v]format=yuv420p,scale=1440:2560,`
       + `zoompan=z='min(zoom+0.0004,1.08)'`
       + `:x='${zoomX}':y='${zoomY}'`
       + `:d=${frames}:s=720x1280:fps=30,`
