@@ -7,6 +7,8 @@
     "start": "node src/index.js",
     "generate": "node src/index.js --once",
     "preview": "node src/index.js --once --preview",
+    "longform": "node src/longform.js",
+    "longform:preview": "node src/longform.js --preview",
     "test": "node scripts/selfcheck.mjs",
     "auth": "node scripts/get-youtube-token.js",
     "analytics": "node src/analytics.js"
