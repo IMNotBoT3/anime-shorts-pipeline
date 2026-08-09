@@ -12,7 +12,7 @@
  * Themes come from AniList trending genres or are specified manually.
  */
 import { existsSync, mkdirSync, rmSync, appendFileSync, readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fetch from 'node-fetch';
 
@@ -164,25 +164,61 @@ async function renderLongform(segments, outputPath, bgmPath) {
   let idx = 0;
 
   const W = 1920, H = 1080; // 16:9 horizontal
+  const FPS = 30;
+  const XFADE = 0.6;
+
+  // Oversize canvas the pan window travels across, matching render.js.
+  const CW = Math.round(W * 1.12 / 2) * 2;
+  const CH = Math.round(H * 1.12 / 2) * 2;
 
   for (let i = 0; i < segments.length; i++) {
     const s = segments[i];
     const dur = s.duration || 8;
-    const frames = Math.ceil(dur * 30);
+    const hold = dur + XFADE;
 
-    inputs.push('-loop', '1', '-t', String(dur.toFixed(2)), '-i', s.imagePath);
-    inputs.push('-i', s.audioPath);
+    inputs.push('-loop', '1', '-t', hold.toFixed(2), '-i', resolve(s.imagePath));
+    inputs.push('-i', resolve(s.audioPath));
 
-    // Ken Burns at 720p intermediate, upscale to 1920x1080, force SAR=1
-    //    setsar=1 is critical: images from Pexels have varying aspect ratios, and
-    //    concat requires every segment to have identical SAR. Without it ffmpeg
-    //    reports "parameters do not match" and produces nothing.
+    // Composite: blurred cover as the backdrop, whole image contained on top.
+    //
+    // A plain cover-crop butchered portrait art in a 16:9 frame — a vertical
+    // Danbooru image was scaled up until it filled 1920x1080, leaving a torso
+    // with the head cropped off. Containing the art preserves the subject
+    // whatever its shape, and the blurred backdrop fills the sides so nothing
+    // is letterboxed. Landscape art covers the frame and hides the backdrop
+    // entirely, so it costs nothing in the common case.
+    //
+    // Only the backdrop pans; panning the contained layer would drift the
+    // subject off-centre. setsar=1 still matters — mixed source aspect ratios
+    // make xfade fail with "parameters do not match".
+    const slackX = CW - W;
+    const slackY = CH - H;
+    const prog = `min(t/${hold.toFixed(2)},1)`;
+    const dir = i % 3;
+    const panX = dir === 0 ? `${slackX}*${prog}`
+      : dir === 1 ? `${slackX}*(1-${prog})`
+        : `${slackX}/2`;
+    const panY = dir === 0 ? `${slackY}*(1-${prog})`
+      : dir === 1 ? `${slackY}*${prog}`
+        : `${slackY}*${prog}`;
+
     filterParts.push(
-      `[${idx}:v]scale=2560:1440,`
-      + `zoompan=z='min(zoom+0.0002,1.05)'`
-      + `:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`
-      + `:d=${frames}:s=1280x720:fps=30,`
-      + `scale=${W}:${H}:flags=lanczos,setsar=1[v${i}]`
+      `[${idx}:v]format=yuv420p,fps=${FPS},split=2[bgsrc${i}][fgsrc${i}]`
+    );
+    filterParts.push(
+      `[bgsrc${i}]scale=${CW}:${CH}:force_original_aspect_ratio=increase:flags=bilinear,`
+      + `crop=${CW}:${CH},`
+      + `crop=${W}:${H}:x='${panX}':y='${panY}',`
+      + `boxblur=26:2,eq=brightness=-0.12:saturation=0.85[bg${i}]`
+    );
+    filterParts.push(
+      `[fgsrc${i}]scale=${W}:${H}:force_original_aspect_ratio=decrease:flags=lanczos[fg${i}]`
+    );
+    filterParts.push(
+      `[bg${i}][fg${i}]overlay=(W-w)/2:(H-h)/2:format=auto,`
+      + `eq=contrast=1.05:saturation=1.02,`
+      + `drawbox=x=0:y=0:w=iw:h=ih:color=black@0.34:t=fill,`
+      + `setsar=1,setpts=PTS-STARTPTS[v${i}]`
     );
 
     audioParts.push(`[${idx + 1}:a]`);
@@ -193,33 +229,52 @@ async function renderLongform(segments, outputPath, bgmPath) {
   const hasBGM = bgmPath && existsSync(bgmPath);
   if (hasBGM) inputs.push('-i', bgmPath);
 
-  const vLabels = segments.map((_, i) => `[v${i}]`).join('');
-  filterParts.push(`${vLabels}concat=n=${segments.length}:v=1:a=0[vout]`);
+  // Crossfade the segments together rather than hard-cutting.
+  if (segments.length === 1) {
+    filterParts.push(`[v0]null[vout]`);
+  } else {
+    let prev = 'v0';
+    let offset = (segments[0].duration || 8) - XFADE;
+    for (let i = 1; i < segments.length; i++) {
+      const out = i === segments.length - 1 ? 'vout' : `xf${i - 1}`;
+      filterParts.push(
+        `[${prev}][v${i}]xfade=transition=fade:duration=${XFADE}:offset=${offset.toFixed(2)}[${out}]`
+      );
+      prev = out;
+      offset += (segments[i].duration || 8) - XFADE;
+    }
+  }
 
   const aLabels = audioParts.join('');
   filterParts.push(`${aLabels}concat=n=${segments.length}:v=0:a=1[voice]`);
 
   if (hasBGM) {
-    filterParts.push(`[${idx}:a]volume=0.08,afade=t=in:st=0:d=3,afade=t=out:st=170:d=10[bgm]`);
+    // Fade the bed out relative to the real runtime, not a hardcoded 170s.
+    const total = segments.reduce((n, s) => n + (s.duration || 8), 0);
+    filterParts.push(
+      `[${idx}:a]volume=0.08,afade=t=in:st=0:d=3,`
+      + `afade=t=out:st=${Math.max(0, total - 8).toFixed(2)}:d=8[bgm]`
+    );
     filterParts.push(`[voice][bgm]amix=inputs=2:duration=first:dropout_transition=3[aout]`);
   } else {
-    filterParts.push(`[voice]acopy[aout]`);
+    filterParts.push(`[voice]anull[aout]`);
   }
 
   const args = [
     ...inputs,
     '-filter_complex', filterParts.join(';'),
     '-map', '[vout]', '-map', '[aout]',
-    '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
-    '-c:a', 'aac', '-b:a', '192k',
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21',
+    '-r', String(FPS), '-g', String(FPS * 2),
+    '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
     '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-    '-shortest', '-y', outputPath,
+    '-shortest', '-y', resolve(outputPath),
   ];
 
-  console.log(`   Rendering ${segments.length} segments (16:9 long-form)...`);
-  await execFileAsync('ffmpeg', args, { timeout: 900000, maxBuffer: 10 * 1024 * 1024 });
+  console.log(`   Rendering ${segments.length} segments (16:9, fill-frame + pan)...`);
+  await execFileAsync('ffmpeg', args, { timeout: 900000, maxBuffer: 20 * 1024 * 1024 });
 
-  if (!existsSync(outputPath)) throw new Error(`No output at ${outputPath}`);
+  if (!existsSync(resolve(outputPath))) throw new Error(`No output at ${outputPath}`);
   return outputPath;
 }
 
@@ -302,23 +357,27 @@ async function main() {
     console.log(`\n  Total duration: ${totalDuration.toFixed(1)}s (${(totalDuration / 60).toFixed(1)} min)`);
     console.log(`  Segments: ${segments.length}`);
 
-    // 3. Fetch images for each segment
+    // 3. Fetch images for each segment.
+    //    Anime and character are passed through so the art search hits anime
+    //    sources; with only a prose imageQuery it falls back to stock photos.
     console.log('\n  Fetching images...');
     const imageQueries = segments.map((s, i) => {
-      if (s.type === 'intro') return { imageQuery: 'dramatic anime landscape dark cinematic' };
-      if (s.type === 'outro') return { imageQuery: 'emotional anime sunset stars cinematic' };
-      if (s.type === 'setup') {
-        const qi = Math.floor(i / 3);
-        return { imageQuery: `${quotes[qi]?.anime || 'anime'} dramatic scene dark cinematic` };
+      const qi = Math.min(Math.floor(i / 3), quotes.length - 1);
+      const q = quotes[qi] || {};
+      if (s.type === 'intro') {
+        return { anime: quotes[0]?.anime, imageQuery: 'dramatic anime landscape dark cinematic' };
+      }
+      if (s.type === 'outro') {
+        return { anime: quotes[quotes.length - 1]?.anime, imageQuery: 'emotional anime sunset stars cinematic' };
       }
       if (s.type === 'quote') {
-        const qi = Math.floor(i / 3);
-        return { imageQuery: `${quotes[qi]?.character} ${quotes[qi]?.anime} emotional anime scene` };
+        return { anime: q.anime, character: q.character, imageQuery: `${q.character} ${q.anime} emotional anime scene` };
       }
-      return { imageQuery: 'dark moody anime landscape cinematic' };
+      // setup / bridge
+      return { anime: q.anime, imageQuery: `${q.anime || 'anime'} dramatic scene dark cinematic` };
     });
 
-    const images = await fetchAllImages(imageQueries, compDir);
+    const images = await fetchAllImages(imageQueries, compDir, { orientation: 'landscape' });
     for (let i = 0; i < segments.length; i++) {
       segments[i].imagePath = images[i] || join(compDir, `scene-${i}.jpg`);
     }
