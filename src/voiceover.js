@@ -24,17 +24,26 @@ export async function generateVoiceover(text, outputPath, voice) {
   const args = [
     '--voice', voice,
     '--rate', RATE,
-    '--pitch', PITCH,
+    '--pitch', PITCH.startsWith('-') ? `${PITCH}` : PITCH,
     '--text', text,
     '--write-media', outputPath,
   ];
 
   try {
-    await execFileAsync('edge-tts', args, { timeout: 30000 });
-  } catch (err) {
-    // edge-tts might be installed as a Python module
-    await execFileAsync('python', ['-m', 'edge_tts', ...args], { timeout: 30000 });
-  }
+    // Try edge-tts directly first, then as Python module
+    try {
+      await execFileAsync('edge-tts', args, { timeout: 30000 });
+    } catch {
+      // edge-tts --pitch=-2Hz (use = to avoid argument parsing issue with negative values)
+      const pyArgs = ['-m', 'edge_tts',
+        '--voice', voice,
+        '--rate', RATE,
+        `--pitch=${PITCH}`,
+        '--text', text,
+        '--write-media', outputPath,
+      ];
+      await execFileAsync('python', pyArgs, { timeout: 30000 });
+    }
 
   if (!existsSync(outputPath)) {
     throw new Error(`edge-tts did not produce ${outputPath}`);

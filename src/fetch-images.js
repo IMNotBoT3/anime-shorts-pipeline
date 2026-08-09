@@ -67,10 +67,10 @@ export async function fetchAllImages(scenes, outputDir) {
     // Try Pexels first (better anime/artistic content), then Unsplash
     let url = await searchPexels(query) || await searchUnsplash(query);
 
-    // Fallback queries if specific one fails
+    // Fallback queries if specific one fails — use abstract/aesthetic terms that stock sites have
     if (!url) {
-      const fallbacks = ['anime dramatic landscape', 'dark anime aesthetic', 'anime sunset silhouette'];
-      url = await searchPexels(fallbacks[i % fallbacks.length]);
+      const fallbacks = ['dark moody landscape dramatic sky', 'sunset silhouette person dramatic', 'night sky stars dramatic cinematic'];
+      url = await searchPexels(fallbacks[i % fallbacks.length]) || await searchUnsplash(fallbacks[i % fallbacks.length]);
     }
 
     if (url) {
