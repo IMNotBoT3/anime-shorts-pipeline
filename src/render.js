@@ -136,7 +136,7 @@ export async function renderVideo(scenes, outputPath) {
   console.log(`   Rendering ${scenes.length} scenes with zoom + captions + BGM...`);
 
   try {
-    await execFileAsync('ffmpeg', args, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 });
+    await execFileAsync('ffmpeg', args, { timeout: 600000, maxBuffer: 10 * 1024 * 1024 });
   } catch (err) {
     const stderr = err.stderr || '';
     const msg = stderr.slice(-1000) || err.message?.slice(-500) || 'unknown error';
