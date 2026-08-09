@@ -20,8 +20,10 @@ const injected = [];
 const missing = [];
 
 for (const [envVar, [section, key]] of Object.entries(MAP)) {
-  const value = process.env[envVar];
-  if (!value) { missing.push(envVar); continue; }
+  const raw = process.env[envVar];
+  if (!raw) { missing.push(envVar); continue; }
+  // Strip wrapping quotes — some secret managers add them
+  const value = raw.replace(/^["']|["']$/g, '').trim();
   config[section] ??= {};
   config[section][key] = value;
   injected.push(envVar);
