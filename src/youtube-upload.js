@@ -26,8 +26,8 @@ export async function uploadToYouTube(videoPath, meta) {
   const categoryId = meta.categoryId || config.channel?.category || '24';
   const tags = meta.tags?.length ? meta.tags : config.channel?.defaultTags || [];
 
-  const title = meta.title.includes('#Shorts')
-    ? meta.title : `${meta.title} #Shorts`.slice(0, 100);
+  const title = meta.title.includes('#shorts') || meta.title.includes('#Shorts')
+    ? meta.title : `${meta.title} #shorts`.slice(0, 100);
 
   const description = [
     meta.description || '',

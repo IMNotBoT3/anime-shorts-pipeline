@@ -34,10 +34,10 @@ console.log('\nanime-shorts-pipeline self-check\n');
 // Voice selection works
 {
   const { selectVoice } = await import('../src/generate-script.js');
-  assert.ok(selectVoice('male', 'power').includes('Guy'));
-  assert.ok(selectVoice('male', 'emotional').includes('Davis'));
-  assert.ok(selectVoice('female', 'strong').includes('Jenny'));
-  assert.ok(selectVoice('female', 'emotional').includes('Aria'));
+  assert.ok(selectVoice('male', 'power').includes('Andrew'));
+  assert.ok(selectVoice('male', 'emotional').includes('Brian'));
+  assert.ok(selectVoice('female', 'strong').includes('Ava'));
+  assert.ok(selectVoice('female', 'emotional').includes('Emma'));
   ok('voice selection maps gender+mood to correct voices');
 }
 

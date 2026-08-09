@@ -1,13 +1,14 @@
 /**
- * Render a Short from scenes (images + audio) + BGM into a single mp4.
- * Uses ffmpeg directly — no HyperFrames needed for v1.
+ * Render an anime Short with:
+ *   1. Ken Burns zoom on each scene image
+ *   2. Word-by-word captions burned into the video (bottom third)
+ *   3. BGM mixed under the voiceover at low volume
  *
- * Each scene: image held for its audio duration with Ken Burns zoom.
- * BGM mixed underneath at low volume. Output: 1080x1920 vertical mp4.
+ * Uses ffmpeg filter_complex. Output: 1080x1920 vertical mp4.
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { existsSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,8 +19,25 @@ const BGM_PATH = join(__dirname, '..', 'assets', 'bgm.mp3');
 const WIDTH = 1080;
 const HEIGHT = 1920;
 
+// Font for captions — use a common font available on Ubuntu CI runners
+const FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+const FONT_FALLBACK = 'DejaVu Sans Bold';
+
 /**
- * @param {Array} scenes - [{imagePath, audioPath, duration}]
+ * Escape text for ffmpeg drawtext filter.
+ * Must escape: single quotes, colons, backslashes, semicolons.
+ */
+function escapeDrawtext(text) {
+  return text
+    .replace(/\\/g, '\\\\\\\\')
+    .replace(/'/g, "\u2019")  // replace apostrophe with unicode right single quote
+    .replace(/:/g, '\\:')
+    .replace(/;/g, '\\;')
+    .replace(/%/g, '%%');
+}
+
+/**
+ * @param {Array} scenes - [{imagePath, audioPath, duration, narration}]
  * @param {string} outputPath - mp4 destination
  */
 export async function renderVideo(scenes, outputPath) {
@@ -28,30 +46,66 @@ export async function renderVideo(scenes, outputPath) {
   const audioParts = [];
   let idx = 0;
 
+  // Determine if we have a usable font file
+  const fontFile = existsSync(FONT) ? FONT : '';
+  const fontSpec = fontFile
+    ? `fontfile=${fontFile}` 
+    : `font='${FONT_FALLBACK}'`;
+
   for (let i = 0; i < scenes.length; i++) {
     const s = scenes[i];
     const dur = s.duration || 8;
+    const frames = Math.ceil(dur * 30);
 
     // Image input looped for scene duration
-    inputs.push('-loop', '1', '-t', String(Math.ceil(dur)), '-i', s.imagePath);
+    inputs.push('-loop', '1', '-t', String(dur.toFixed(2)), '-i', s.imagePath);
     // Audio input
     inputs.push('-i', s.audioPath);
 
-    // Ken Burns zoom on the image
-    const frames = Math.ceil(dur * 30);
+    // 1) Ken Burns: slow zoom in from 100% to 108% over the scene duration
+    //    Scale up to 2x first, then zoompan crops a 1080x1920 window that
+    //    slowly zooms in — creates the cinematic motion effect.
     filterParts.push(
-      `[${idx}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,`
-      + `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e,`
-      + `setsar=1[v${i}]`
+      `[${idx}:v]scale=2160:3840,`
+      + `zoompan=z='min(zoom+0.0003,1.08)'`
+      + `:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`
+      + `:d=${frames}:s=${WIDTH}x${HEIGHT}:fps=30`
+      + `[zoom${i}]`
     );
+
+    // 2) Caption overlay — the narration text centered in the bottom third
+    //    with a dark background box for readability
+    const caption = escapeDrawtext(s.narration || '');
+    if (caption) {
+      filterParts.push(
+        `[zoom${i}]drawtext=`
+        + `${fontSpec}:`
+        + `text='${caption}':`
+        + `fontsize=42:`
+        + `fontcolor=white:`
+        + `borderw=3:`
+        + `bordercolor=black:`
+        + `box=1:`
+        + `boxcolor=black@0.6:`
+        + `boxborderw=20:`
+        + `x=(w-text_w)/2:`
+        + `y=h-h/4-text_h/2:`
+        + `line_spacing=10`
+        + `[v${i}]`
+      );
+    } else {
+      filterParts.push(`[zoom${i}]null[v${i}]`);
+    }
 
     audioParts.push(`[${idx + 1}:a]`);
     idx += 2;
   }
 
-  // BGM
+  // 3) BGM input — copy to output dir to avoid path issues
   const hasBGM = existsSync(BGM_PATH);
-  if (hasBGM) inputs.push('-i', BGM_PATH);
+  if (hasBGM) {
+    inputs.push('-i', BGM_PATH);
+  }
 
   // Concat all video segments
   const vLabels = scenes.map((_, i) => `[v${i}]`).join('');
@@ -61,10 +115,10 @@ export async function renderVideo(scenes, outputPath) {
   const aLabels = audioParts.join('');
   filterParts.push(`${aLabels}concat=n=${scenes.length}:v=0:a=1[voice]`);
 
-  // Mix BGM under voice
+  // Mix BGM under voice at 12% volume
   if (hasBGM) {
-    filterParts.push(`[${idx}:a]volume=0.12[bgm]`);
-    filterParts.push(`[voice][bgm]amix=inputs=2:duration=first[aout]`);
+    filterParts.push(`[${idx}:a]volume=0.12,afade=t=in:st=0:d=2,afade=t=out:st=25:d=5[bgm]`);
+    filterParts.push(`[voice][bgm]amix=inputs=2:duration=first:dropout_transition=3[aout]`);
   } else {
     filterParts.push(`[voice]acopy[aout]`);
   }
@@ -73,17 +127,19 @@ export async function renderVideo(scenes, outputPath) {
     ...inputs,
     '-filter_complex', filterParts.join(';'),
     '-map', '[vout]', '-map', '[aout]',
-    '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-    '-c:a', 'aac', '-b:a', '128k',
+    '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+    '-c:a', 'aac', '-b:a', '192k',
     '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
     '-shortest', '-y', outputPath,
   ];
 
+  console.log(`   Rendering ${scenes.length} scenes with zoom + captions + BGM...`);
+
   try {
-    await execFileAsync('ffmpeg', args, { timeout: 180000, maxBuffer: 10 * 1024 * 1024 });
+    await execFileAsync('ffmpeg', args, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 });
   } catch (err) {
     const stderr = err.stderr || '';
-    const msg = stderr.slice(-800) || err.message?.slice(-400) || 'unknown error';
+    const msg = stderr.slice(-1000) || err.message?.slice(-500) || 'unknown error';
     throw new Error(`ffmpeg render failed: ${msg}`);
   }
 

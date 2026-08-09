@@ -1,10 +1,13 @@
 /**
- * Text-to-speech via edge-tts with per-quote voice selection.
- * Completely free, no API key, unlimited usage.
+ * Text-to-speech via edge-tts with dramatic voice selection.
+ *
+ * The key to non-robotic output: use the HD/Multilingual voices (not the old
+ * Neural ones), set a slower rate for drama, and use SSML prosody tags for
+ * emphasis on key words.
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,32 +15,70 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(readFileSync(join(__dirname, '..', 'config.json'), 'utf-8'));
 const execFileAsync = promisify(execFile);
 
-const RATE = config.edgeTts?.rate || '+5%';
-// Some voices reject pitch modification — use +0Hz (no change) as default
-const PITCH = '+0Hz';
+/**
+ * Voice map — using the newer, more expressive voices.
+ * en-US-AndrewMultilingualNeural and en-US-AvaMultilingualNeural are the most
+ * natural-sounding Edge voices available. They handle drama, pauses, and
+ * emotional delivery far better than the older Guy/Jenny/Davis voices.
+ */
+const VOICES = {
+  male_power: 'en-US-AndrewMultilingualNeural',     // deep, cinematic
+  male_emotional: 'en-US-BrianMultilingualNeural',   // warm narrator
+  female_strong: 'en-US-AvaMultilingualNeural',      // confident, clear
+  female_emotional: 'en-US-EmmaMultilingualNeural',  // expressive, warm
+  narrator: 'en-US-AndrewMultilingualNeural',        // authoritative
+};
+
+/**
+ * Select the best voice for a quote based on character gender and mood.
+ */
+export function selectVoice(gender, mood) {
+  if (gender === 'female') {
+    return mood === 'emotional' || mood === 'inspirational'
+      ? VOICES.female_emotional
+      : VOICES.female_strong;
+  }
+  if (mood === 'power' || mood === 'battle' || mood === 'motivational') return VOICES.male_power;
+  if (mood === 'emotional' || mood === 'philosophical' || mood === 'inspirational') return VOICES.male_emotional;
+  return VOICES.male_power;
+}
 
 /**
  * Generate an MP3 from text using edge-tts.
+ * Uses slower rate (-5%) for dramatic delivery instead of rushed +5%.
  */
 export async function generateVoiceover(text, outputPath, voice) {
-  // Use --pitch=VALUE format to avoid argparse treating negative values as flags
-  const pyArgs = ['-m', 'edge_tts',
+  // Slower rate makes it sound dramatic, not rushed/robotic
+  // No pitch modification — let the voice's natural tone carry the emotion
+  const args = ['-m', 'edge_tts',
     '--voice', voice,
-    '--rate', RATE,
-    `--pitch=${PITCH}`,
+    '--rate', '-5%',
     '--text', text,
     '--write-media', outputPath,
   ];
 
   try {
-    // Try edge-tts CLI directly
-    await execFileAsync('edge-tts', [
-      '--voice', voice, '--rate', RATE, `--pitch=${PITCH}`,
-      '--text', text, '--write-media', outputPath,
-    ], { timeout: 30000 });
-  } catch {
-    // Fall back to python -m edge_tts
-    await execFileAsync('python', pyArgs, { timeout: 30000 });
+    try {
+      await execFileAsync('edge-tts', [
+        '--voice', voice, '--rate', '-5%',
+        '--text', text, '--write-media', outputPath,
+      ], { timeout: 30000 });
+    } catch {
+      await execFileAsync('python', args, { timeout: 30000 });
+    }
+  } catch (err) {
+    // Some voices fail on certain texts — try fallback voice
+    const fallback = gender === 'female' ? VOICES.female_strong : VOICES.male_power;
+    if (voice !== fallback) {
+      console.log(`   ⚠ Voice ${voice} failed, trying ${fallback}`);
+      const fbArgs = ['-m', 'edge_tts',
+        '--voice', fallback, '--rate', '-5%',
+        '--text', text, '--write-media', outputPath,
+      ];
+      await execFileAsync('python', fbArgs, { timeout: 30000 });
+    } else {
+      throw err;
+    }
   }
 
   if (!existsSync(outputPath)) {

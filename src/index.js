@@ -82,13 +82,14 @@ async function processQuote(quote) {
     }
     console.log(`  Duration: ${totalDuration.toFixed(1)}s`);
 
-    // 4. Render video (ffmpeg: Ken Burns zoom + BGM)
+    // 4. Render video (ffmpeg: Ken Burns zoom + captions + BGM)
     const outputFile = join(storyDir, `anime-short-${quote.id}.mp4`);
     console.log('  Render...');
     const renderScenes = script.scenes.map((s, i) => ({
       imagePath: join(storyDir, `scene-${i}.jpg`),
       audioPath: join(storyDir, `scene-${i}.mp3`),
       duration: s.duration,
+      narration: s.narration,
     })).filter((s) => existsSync(s.imagePath) && existsSync(s.audioPath));
 
     if (renderScenes.length < script.scenes.length) {

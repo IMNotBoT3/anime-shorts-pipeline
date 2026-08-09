@@ -18,23 +18,31 @@ const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'openai/gpt-4.1-mini';
 
 export const SCENE_COUNT = 3;
-export const MAX_TOTAL_WORDS = 55; // ~24s at 2.27 words/sec
+export const MAX_TOTAL_WORDS = 120; // ~53s at 2.27 words/sec — matches the 45-60s sweet spot
+
+/**
+ * Channel data (last 90 days) shows the sweet spot is 45-60 seconds:
+ *   - 0:56 (41.7% retention, 2389 views) — Re:Zero Subaru
+ *   - 0:54 (37.0% retention, 410 views) — Code Geass Lelouch
+ *   - 0:49 (35.9% retention, 617 views) — Re:Zero Rem
+ * Shorter clips (0:14-0:23) get 10-22% retention and <50 views.
+ * The audience wants to FEEL the quote, not speed through it.
+ */
+export const TARGET_DURATION_SECONDS = [45, 60];
 
 /**
  * Voice selection based on character gender and quote mood.
+ * Uses the newer Multilingual voices — much more natural and dramatic.
  */
 export function selectVoice(gender, mood) {
-  const voices = config.edgeTts?.voices || {};
-
   if (gender === 'female') {
-    return mood === 'emotional' ? voices.female_emotional || 'en-US-AriaNeural'
-      : voices.female_strong || 'en-US-JennyNeural';
+    return mood === 'emotional' || mood === 'inspirational'
+      ? 'en-US-EmmaMultilingualNeural'
+      : 'en-US-AvaMultilingualNeural';
   }
-
-  // Male
-  if (mood === 'power' || mood === 'battle') return voices.male_power || 'en-US-GuyNeural';
-  if (mood === 'emotional' || mood === 'philosophical') return voices.male_emotional || 'en-US-DavisNeural';
-  return voices.male_power || 'en-US-GuyNeural';
+  if (mood === 'power' || mood === 'battle' || mood === 'motivational') return 'en-US-AndrewMultilingualNeural';
+  if (mood === 'emotional' || mood === 'philosophical' || mood === 'inspirational') return 'en-US-BrianMultilingualNeural';
+  return 'en-US-AndrewMultilingualNeural';
 }
 
 function buildPrompt(quote) {
@@ -46,32 +54,36 @@ ANIME: ${quote.anime}
 MOOD: ${quote.mood}
 GENDER: ${quote.gender}
 
-Write a 3-scene script for a 20-25 second Short. Total word count: 45-55 words across all 3 scenes.
+Write a 3-scene script for a 45-60 second Short. Total word count: 90-120 words across all 3 scenes. The audience wants to FEEL the quote — build atmosphere, deliver with weight, land the emotion. Do NOT rush.
 
-═══ SCENE 1: INTRO (8-12 words) ═══
-Set the stage. Name the character or the moment. Create anticipation.
-Example tone: "When all hope was lost, one voice cut through the silence..."
-Do NOT say "In [anime name]" — that's the title card's job. Be dramatic, not descriptive.
+═══ SCENE 1: DRAMATIC INTRO (25-35 words) ═══
+Build the atmosphere. Set the emotional stage. Name what was at stake in the moment.
+Paint the scene — the battle, the goodbye, the breaking point.
+Use vivid sensory language: "Rain hammered the battlefield as the last standing warrior faced an army alone..."
+Do NOT say "In [anime name]" — that's generic. Be cinematic. Be specific to THIS moment.
+End on a dramatic pause — the breath before the quote lands.
 
 ═══ SCENE 2: THE QUOTE (exact quote, no changes) ═══
 Narrate the quote EXACTLY as written above. Do not paraphrase, shorten, or alter it.
-This is the emotional core of the Short.
+This is the emotional core. The voice will deliver it with dramatic weight.
 
-═══ SCENE 3: OUTRO (8-12 words) ═══  
-The emotional landing. Reflect on what the quote means. Create the loop moment.
-End with something that makes the viewer want to hear the quote again.
-Example: "Some words don't just inspire. They change who you become."
+═══ SCENE 3: REFLECTIVE OUTRO (25-35 words) ═══  
+The emotional landing. What this quote means beyond the anime.
+Connect it to the viewer's own life — make it personal and universal.
+End with a line that creates the loop moment — something that makes the viewer want to hear it again.
+Example: "Some battles are fought not with fists, but with the words you refuse to let die inside you."
 
 ═══ imageQuery per scene ═══
-Each scene needs a search query for a background image:
-- Scene 1: dramatic anime landscape or silhouette matching the mood
-- Scene 2: the character or a scene from the anime (use character + anime name)
-- Scene 3: abstract/emotional anime art matching the mood (sunset, rain, stars)
+Each scene needs a search query for a dramatic background:
+- Scene 1: moody cinematic landscape or dark dramatic sky matching the emotional tone
+- Scene 2: ${quote.character} ${quote.anime} anime scene (the character in an emotional moment)
+- Scene 3: emotional cinematic scene — rain, sunset, stars, silhouette — matching the mood
 
 ═══ YOUTUBE METADATA ═══
-- title: under 60 chars, the character name + a teaser of the quote. Include the anime name.
-- description: 2-3 lines, the full quote attributed, then the anime name
-- hashtags: #AnimeQuotes #[AnimeName] #[CharacterName] #Shorts #Motivation
+- title: under 70 chars. Format: "${quote.anime} - ${quote.character}'s [emotional descriptor] [Words/Speech/Quote]" Include (Dub) if English.
+- description: 3-4 lines. The full quote in quotes, attributed to character and anime with episode if known. Then a line about why this moment matters. Then "Subscribe for more powerful anime moments."
+- hashtags: #anime #${quote.anime.replace(/[^a-zA-Z0-9]/g, '')} #${quote.character.replace(/[^a-zA-Z0-9]/g, '')} #animequotes #shorts #animespeech #motivation
+- tags: Generate 25-30 tags covering: character name, anime name, related characters, genre, mood, anime quotes, motivation, emotional anime, similar anime names, voice actor if known. Each tag under 30 chars. Fill close to the 500 char YouTube limit.
 
 Return ONLY valid JSON matching this exact schema:`;
 }
