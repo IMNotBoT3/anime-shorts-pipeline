@@ -10,6 +10,7 @@ const MAP = {
   OPENROUTER_API_KEY: ['openrouter', 'apiKey'],
   UNSPLASH_API_KEY: ['unsplash', 'accessKey'],
   PEXELS_API_KEY: ['pexels', 'apiKey'],
+  EXA_API_KEY: ['exa', 'apiKey'],
   YOUTUBE_CLIENT_ID: ['youtube', 'clientId'],
   YOUTUBE_CLIENT_SECRET: ['youtube', 'clientSecret'],
   YOUTUBE_REFRESH_TOKEN: ['youtube', 'refreshToken'],

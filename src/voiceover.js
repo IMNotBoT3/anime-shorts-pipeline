@@ -96,17 +96,27 @@ export async function generateVoiceover(text, outputPath, voice) {
 
 /**
  * Get audio duration in seconds using ffprobe.
+ * ponytail: resolve() fixes CI bug where relative paths fail with "No such file".
  */
 export async function getAudioDuration(filePath) {
+  const { resolve } = await import('node:path');
+  const absPath = resolve(filePath);
+  if (!existsSync(absPath)) {
+    console.warn(`   ⚠ getAudioDuration: file not found: ${absPath}`);
+    return 0;
+  }
   try {
     const { stdout } = await execFileAsync('ffprobe', [
       '-v', 'error',
       '-show_entries', 'format=duration',
       '-of', 'default=nw=1:nk=1',
-      filePath,
+      absPath,
     ], { timeout: 10000 });
-    return parseFloat(stdout.trim()) || 0;
-  } catch {
+    const dur = parseFloat(stdout.trim()) || 0;
+    if (dur === 0) console.warn(`   ⚠ getAudioDuration: ffprobe returned 0 for ${absPath}`);
+    return dur;
+  } catch (err) {
+    console.warn(`   ⚠ getAudioDuration ffprobe error: ${err.message}`);
     return 0;
   }
 }
