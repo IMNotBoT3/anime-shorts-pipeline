@@ -74,26 +74,49 @@ export async function renderVideo(scenes, outputPath) {
       + `[zoom${i}]`
     );
 
-    // 2) Caption overlay — the narration text centered in the bottom third
-    //    with a dark background box for readability
+    // 2) Caption overlay — narration text with bold hook text for scene 1
     const caption = escapeDrawtext(s.narration || '');
     if (caption) {
-      filterParts.push(
-        `[zoom${i}]drawtext=`
+      // Scene 1 gets the hook as LARGE text in the first 2 seconds, then fades to normal caption
+      const isHookScene = (i === 0);
+      const hookWords = isHookScene
+        ? escapeDrawtext((s.narration || '').split(/[.!?—]/)[0] || '') // first sentence
+        : '';
+
+      let drawFilters = '';
+      if (isHookScene && hookWords) {
+        // Big bold hook text (top third) — visible in first 2 seconds
+        drawFilters += `drawtext=`
+          + `${fontSpec}:`
+          + `text='${hookWords}':`
+          + `fontsize=56:`
+          + `fontcolor=white:`
+          + `borderw=4:`
+          + `bordercolor=black:`
+          + `box=1:`
+          + `boxcolor=black@0.7:`
+          + `boxborderw=25:`
+          + `x=(w-text_w)/2:`
+          + `y=h/4-text_h/2:`
+          + `line_spacing=12:`
+          + `enable='between(t,0,4)',`;
+      }
+      // Normal caption (bottom third) — full narration
+      drawFilters += `drawtext=`
         + `${fontSpec}:`
         + `text='${caption}':`
-        + `fontsize=42:`
+        + `fontsize=38:`
         + `fontcolor=white:`
         + `borderw=3:`
         + `bordercolor=black:`
         + `box=1:`
-        + `boxcolor=black@0.6:`
-        + `boxborderw=20:`
+        + `boxcolor=black@0.5:`
+        + `boxborderw=18:`
         + `x=(w-text_w)/2:`
-        + `y=h-h/4-text_h/2:`
-        + `line_spacing=10`
-        + `[v${i}]`
-      );
+        + `y=h-h/5-text_h/2:`
+        + `line_spacing=8`;
+
+      filterParts.push(`[zoom${i}]${drawFilters}[v${i}]`);
     } else {
       filterParts.push(`[zoom${i}]null[v${i}]`);
     }

@@ -57,10 +57,19 @@ GENDER: ${quote.gender}
 Write a 3-scene script for a 45-60 second Short. Total word count: 90-120 words across all 3 scenes. The audience wants to FEEL the quote — build atmosphere, deliver with weight, land the emotion. Do NOT rush.
 
 ═══ SCENE 1: DRAMATIC INTRO (25-35 words) ═══
-Build the atmosphere. Set the emotional stage. Name what was at stake in the moment.
-Paint the scene — the battle, the goodbye, the breaking point.
-Use vivid sensory language: "Rain hammered the battlefield as the last standing warrior faced an army alone..."
-Do NOT say "In [anime name]" — that's generic. Be cinematic. Be specific to THIS moment.
+THE FIRST 3 SECONDS DECIDE EVERYTHING. 87% of viewers swipe away before hearing the quote.
+Your intro must stop the thumb INSTANTLY with a visual + spoken hook.
+
+The FIRST LINE (first 8-10 words) must work as BOLD TEXT ON SCREEN — it will appear
+as a text overlay on the first frame before the voiceover finishes. It must create
+an information gap or emotional tension that makes swiping away feel like missing out.
+
+NOT: "In one of anime's most powerful moments..."  (generic, could be any video)
+YES: "He watched everyone he loved die — then said THIS."  (specific, creates gap)
+YES: "One sentence. That's all it took to change a coward into a hero."
+
+After the hook line, build the atmosphere. Set the emotional stage — the battle,
+the goodbye, the breaking point. Use vivid sensory language.
 End on a dramatic pause — the breath before the quote lands.
 
 ═══ SCENE 2: THE QUOTE (exact quote, no changes) ═══
@@ -68,10 +77,14 @@ Narrate the quote EXACTLY as written above. Do not paraphrase, shorten, or alter
 This is the emotional core. The voice will deliver it with dramatic weight.
 
 ═══ SCENE 3: REFLECTIVE OUTRO (25-35 words) ═══  
-The emotional landing. What this quote means beyond the anime.
-Connect it to the viewer's own life — make it personal and universal.
-End with a line that creates the loop moment — something that makes the viewer want to hear it again.
-Example: "Some battles are fought not with fists, but with the words you refuse to let die inside you."
+PREVENT GRADUAL DECLINE — by scene 3 viewers are drifting unless you RE-ESCALATE.
+The outro must NOT be a calm reflection. It must hit HARDER than the quote itself.
+Connect the quote to something UNIVERSAL and PERSONAL — make the viewer feel it about
+their own life, their own battles, their own moments of doubt.
+
+End with a line that creates the loop moment — something that reframes the quote so
+hearing it again hits differently. The best outros make the intro feel like foreshadowing.
+Example: "Some battles are fought not with fists, but with the words you refuse to let die inside you. And maybe... that voice is yours."
 
 ═══ imageQuery per scene ═══
 Each scene needs a search query for a dramatic background:
