@@ -76,13 +76,30 @@ export async function fetchAllImages(scenes, outputDir) {
     if (url) {
       try {
         await downloadImage(url, outPath);
-        results.push(outPath);
-        console.log(`  ✓ Image ${i + 1}/${scenes.length}: "${query.slice(0, 40)}"`);
-        continue;
+        if (existsSync(outPath)) {
+          results.push(outPath);
+          console.log(`  ✓ Image ${i + 1}/${scenes.length}: "${query.slice(0, 40)}"`);
+          continue;
+        }
       } catch {}
     }
 
-    console.log(`  ⚠ Image ${i + 1}/${scenes.length}: fallback for "${query.slice(0, 40)}"`);
+    // Generate a solid dark placeholder so the render can proceed
+    // ffmpeg creates a 1080x1920 dark gradient image
+    try {
+      const { execFileSync } = await import('node:child_process');
+      execFileSync('ffmpeg', [
+        '-f', 'lavfi', '-i', `color=c=0x1a1a2e:s=${1080}x${1920}:d=1`,
+        '-frames:v', '1', '-y', outPath,
+      ], { timeout: 10000 });
+      if (existsSync(outPath)) {
+        results.push(outPath);
+        console.log(`  ⚠ Image ${i + 1}/${scenes.length}: placeholder for "${query.slice(0, 40)}"`);
+        continue;
+      }
+    } catch {}
+
+    console.log(`  ⚠ Image ${i + 1}/${scenes.length}: MISSING "${query.slice(0, 40)}"`);
     results.push(null);
   }
 
