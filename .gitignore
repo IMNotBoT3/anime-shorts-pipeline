@@ -3,6 +3,9 @@ output/
 .tmp-*
 *.log
 
-# Thumbnail build artifacts: downloaded art and rendered screenshots.
+# Thumbnail build artifacts: downloaded art, rendered screenshots, and the
+# composition itself, which is generated from src/thumbnail-template.html on
+# every build.
 thumbnail/assets/
 thumbnail/snapshots/
+thumbnail/index.html
