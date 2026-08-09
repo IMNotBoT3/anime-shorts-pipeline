@@ -172,13 +172,16 @@ async function renderLongform(segments, outputPath, bgmPath) {
     inputs.push('-loop', '1', '-t', String(dur.toFixed(2)), '-i', s.imagePath);
     inputs.push('-i', s.audioPath);
 
-    // Ken Burns at 720p intermediate, upscale to 1920x1080
+    // Ken Burns at 720p intermediate, upscale to 1920x1080, force SAR=1
+    //    setsar=1 is critical: images from Pexels have varying aspect ratios, and
+    //    concat requires every segment to have identical SAR. Without it ffmpeg
+    //    reports "parameters do not match" and produces nothing.
     filterParts.push(
       `[${idx}:v]scale=2560:1440,`
       + `zoompan=z='min(zoom+0.0002,1.05)'`
       + `:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`
       + `:d=${frames}:s=1280x720:fps=30,`
-      + `scale=${W}:${H}:flags=lanczos[v${i}]`
+      + `scale=${W}:${H}:flags=lanczos,setsar=1[v${i}]`
     );
 
     audioParts.push(`[${idx + 1}:a]`);

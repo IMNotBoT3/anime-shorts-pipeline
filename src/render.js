@@ -79,7 +79,7 @@ export async function renderVideo(scenes, outputPath) {
       + `zoompan=z='min(zoom+0.0004,1.08)'`
       + `:x='${zoomX}':y='${zoomY}'`
       + `:d=${frames}:s=720x1280:fps=30,`
-      + `scale=${WIDTH}:${HEIGHT}:flags=lanczos`
+      + `scale=${WIDTH}:${HEIGHT}:flags=lanczos,setsar=1`
       + `[zoom${i}]`
     );
 
