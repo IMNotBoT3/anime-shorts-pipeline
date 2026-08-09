@@ -13,7 +13,8 @@ const config = JSON.parse(readFileSync(join(__dirname, '..', 'config.json'), 'ut
 const execFileAsync = promisify(execFile);
 
 const RATE = config.edgeTts?.rate || '+5%';
-const PITCH = config.edgeTts?.pitch || '-2Hz';
+// Some voices reject pitch modification — use +0Hz (no change) as default
+const PITCH = '+0Hz';
 
 /**
  * Generate an MP3 from text using edge-tts.
