@@ -348,9 +348,6 @@ async function main() {
     // 6. Upload
     if (!previewMode) {
       console.log('\n  Uploading...');
-      // Mark all quotes as seen
-      for (const q of quotes) markSeen(quoteId(q.quote), `${q.character} - ${q.anime}`);
-
       const meta = {
         ...(script.youtube || {}),
         categoryId: '24', // Entertainment
@@ -358,18 +355,23 @@ async function main() {
       };
       const videoId = await uploadToYouTube(outputPath, meta);
 
-      if (videoId) {
-        if (thumbPath) await setThumbnail(videoId, thumbPath);
-
-        const row = [
-          new Date().toISOString(), compId,
-          `"compilation: ${theme.name}"`, `"${quotes.length} quotes"`,
-          videoId, `https://youtube.com/watch?v=${videoId}`,
-          totalDuration.toFixed(1),
-        ].join(',');
-        appendFileSync(LOG_FILE, row + '\n');
-        console.log(`\n  ✅ Published: https://youtube.com/watch?v=${videoId}`);
+      // Mark seen only after a confirmed upload, so a rejected video does not
+      // consume five quotes with nothing published.
+      if (!videoId) {
+        throw new Error('upload failed — quotes left unseen for a later retry');
       }
+
+      for (const q of quotes) markSeen(quoteId(q.quote), `${q.character} - ${q.anime}`);
+      if (thumbPath) await setThumbnail(videoId, thumbPath);
+
+      const row = [
+        new Date().toISOString(), compId,
+        `"compilation: ${theme.name}"`, `"${quotes.length} quotes"`,
+        videoId, `https://youtube.com/watch?v=${videoId}`,
+        totalDuration.toFixed(1),
+      ].join(',');
+      appendFileSync(LOG_FILE, row + '\n');
+      console.log(`\n  ✅ Published: https://youtube.com/watch?v=${videoId}`);
     } else {
       console.log(`\n  Preview: ${totalDuration.toFixed(1)}s — not uploaded`);
       if (thumbPath) console.log(`  Thumbnail: ${thumbPath}`);

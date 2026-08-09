@@ -120,20 +120,26 @@ async function processQuote(quote) {
 
     // 5. Upload
     if (!previewMode) {
-      markSeen(quote.id, `${quote.character} - ${quote.anime}`);
       const videoId = await uploadToYouTube(outputFile, script.youtube);
-      if (videoId) {
-        const row = [
-          new Date().toISOString(),
-          quote.id,
-          `"${quote.character}"`,
-          `"${quote.anime}"`,
-          videoId,
-          `https://youtube.com/shorts/${videoId}`,
-          totalDuration.toFixed(1),
-        ].join(',');
-        appendFileSync(LOG_FILE, row + '\n');
+
+      // Mark seen only after the upload is confirmed. Marking beforehand burned
+      // the quote permanently whenever the upload failed, so a rejected video
+      // could never be retried.
+      if (!videoId) {
+        throw new Error('upload failed — quote left unseen for a later retry');
       }
+
+      markSeen(quote.id, `${quote.character} - ${quote.anime}`);
+      const row = [
+        new Date().toISOString(),
+        quote.id,
+        `"${quote.character}"`,
+        `"${quote.anime}"`,
+        videoId,
+        `https://youtube.com/shorts/${videoId}`,
+        totalDuration.toFixed(1),
+      ].join(',');
+      appendFileSync(LOG_FILE, row + '\n');
     } else {
       console.log(`  Preview: ${totalDuration.toFixed(1)}s — not uploaded`);
     }

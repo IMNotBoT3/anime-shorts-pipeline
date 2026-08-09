@@ -27,7 +27,7 @@ export async function uploadToYouTube(videoPath, meta) {
 
   // Sanitize tags: YouTube rejects tags with #, special chars, or >30 chars each
   const rawTags = meta.tags?.length ? meta.tags : config.channel?.defaultTags || [];
-  const tags = rawTags
+  const cleanTags = rawTags
     .map(t => String(t)
       .replace(/^#/, '')              // strip leading #
       .replace(/[^a-zA-Z0-9\s\-]/g, '') // only letters, numbers, spaces, hyphens
@@ -39,6 +39,20 @@ export async function uploadToYouTube(videoPath, meta) {
     .filter(t => !/[<>"{}|\\^`]/.test(t)) // extra safety: reject any weird chars
     .filter((t, i, arr) => arr.indexOf(t) === i) // dedupe
     .slice(0, 30);
+
+  // YouTube also caps the *combined* length of all tags at 500 characters and
+  // rejects the whole request with "invalid video keywords" when it is exceeded
+  // — the per-tag rules above are not enough. A tag containing spaces is quoted
+  // by the API, and those quotes count, so budget two extra characters for it.
+  const TAG_BUDGET = 480; // headroom under the 500 limit
+  const tags = [];
+  let used = 0;
+  for (const t of cleanTags) {
+    const cost = t.length + 1 + (t.includes(' ') ? 2 : 0);
+    if (used + cost > TAG_BUDGET) continue;
+    tags.push(t);
+    used += cost;
+  }
 
   const title = meta.longForm
     ? (meta.title || 'Anime Compilation').replace(/#shorts|#Shorts/g, '').trim().slice(0, 100)
@@ -58,7 +72,7 @@ export async function uploadToYouTube(videoPath, meta) {
     cleanHashtags.join(' '),
   ].join('\n').trim();
 
-  console.log(`   Tags (${tags.length}): ${tags.slice(0, 5).join(', ')}...`);
+  console.log(`   Tags (${tags.length}, ${used}/${TAG_BUDGET} chars): ${tags.slice(0, 5).join(', ')}...`);
   console.log(`   Title: ${title.slice(0, 60)}`);
   console.log(`   Hashtags in desc: ${JSON.stringify(meta.hashtags?.slice(0, 5))}`);
   console.log(`   Desc (first 100): ${description.slice(0, 100)}`);
