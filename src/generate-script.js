@@ -113,28 +113,23 @@ const SCRIPT_SCHEMA = {
 };
 
 export async function generateScript(quote) {
-  // Belt and suspenders: ci-config.js writes to config.json, and the env var is
-  // also set directly on the step. Both paths work locally; this ensures CI works
-  // even if the config read has a stale cache from a pre-ci-config import.
-  const apiKey = config.openrouter?.apiKey
+  const rawKey = config.openrouter?.apiKey
     || process.env.OPENROUTER_API_KEY
     || '';
+  // Strip wrapping quotes — GitHub Secrets UI sometimes adds them if pasted with quotes
+  const apiKey = rawKey.replace(/^["']|["']$/g, '').trim();
   if (!apiKey) throw new Error('No OPENROUTER_API_KEY configured');
   if (apiKey.length < 10) throw new Error(`API key looks invalid (${apiKey.length} chars)`);
 
   const prompt = buildPrompt(quote);
 
-  const headers = {
-    'Authorization': `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
-    'HTTP-Referer': 'https://github.com/IMNotBoT3/anime-shorts-pipeline',
-  };
-
-  console.log(`   API key: ${apiKey.slice(0, 8)}...${apiKey.slice(-4)} (${apiKey.length} chars)`);
-
   const res = await fetch(OPENROUTER_API, {
     method: 'POST',
-    headers,
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://github.com/IMNotBoT3/anime-shorts-pipeline',
+    },
     body: JSON.stringify({
       model: MODEL,
       messages: [{ role: 'user', content: prompt }],
