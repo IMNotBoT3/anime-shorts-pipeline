@@ -14,6 +14,7 @@ import { pickQuotes } from './fetch-quotes.js';
 import { generateScript } from './generate-script.js';
 import { fetchAllImages } from './fetch-images.js';
 import { generateVoiceover, getAudioDuration } from './voiceover.js';
+import { renderVideo } from './render.js';
 import { uploadToYouTube } from './youtube-upload.js';
 import { markSeen } from './seen-store.js';
 
@@ -81,11 +82,22 @@ async function processQuote(quote) {
     }
     console.log(`  Duration: ${totalDuration.toFixed(1)}s`);
 
-    // 4. Render (placeholder — needs HyperFrames composition)
-    // For now, use ffmpeg to combine images + audio
+    // 4. Render video (ffmpeg: Ken Burns zoom + BGM)
     const outputFile = join(storyDir, `anime-short-${quote.id}.mp4`);
-    console.log(`  Render... (output: ${outputFile})`);
-    // TODO: HyperFrames composition with text overlay, Ken Burns, transitions
+    console.log('  Render...');
+    const renderScenes = script.scenes.map((s, i) => ({
+      imagePath: join(storyDir, `scene-${i}.jpg`),
+      audioPath: join(storyDir, `scene-${i}.mp3`),
+      duration: s.duration,
+    })).filter((s) => existsSync(s.imagePath) && existsSync(s.audioPath));
+
+    if (renderScenes.length < script.scenes.length) {
+      console.log(`  ⚠ Only ${renderScenes.length}/${script.scenes.length} scenes have both image+audio`);
+    }
+    if (!renderScenes.length) throw new Error('No complete scenes to render');
+
+    await renderVideo(renderScenes, outputFile);
+    console.log(`  Video: ${outputFile}`);
 
     // 5. Upload
     if (!previewMode) {
