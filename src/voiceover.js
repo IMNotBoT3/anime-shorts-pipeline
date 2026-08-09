@@ -49,33 +49,28 @@ export function selectVoice(gender, mood) {
  */
 export async function generateVoiceover(text, outputPath, voice) {
   // Slower rate makes it sound dramatic, not rushed/robotic
-  // No pitch modification — let the voice's natural tone carry the emotion
-  const args = ['-m', 'edge_tts',
-    '--voice', voice,
-    '--rate', '-5%',
-    '--text', text,
-    '--write-media', outputPath,
-  ];
-
+  // Use --rate=VALUE and no pitch to avoid argparse issues with negative values
   try {
     try {
       await execFileAsync('edge-tts', [
-        '--voice', voice, '--rate', '-5%',
+        '--voice', voice, '--rate=-5%',
         '--text', text, '--write-media', outputPath,
       ], { timeout: 30000 });
     } catch {
-      await execFileAsync('python', args, { timeout: 30000 });
+      await execFileAsync('python', ['-m', 'edge_tts',
+        '--voice', voice, '--rate=-5%',
+        '--text', text, '--write-media', outputPath,
+      ], { timeout: 30000 });
     }
   } catch (err) {
     // Some voices fail on certain texts — try fallback voice
     const fallback = 'en-US-AndrewMultilingualNeural';
     if (voice !== fallback) {
       console.log(`   ⚠ Voice ${voice} failed, trying ${fallback}`);
-      const fbArgs = ['-m', 'edge_tts',
-        '--voice', fallback, '--rate', '-5%',
+      await execFileAsync('python', ['-m', 'edge_tts',
+        '--voice', fallback, '--rate=-5%',
         '--text', text, '--write-media', outputPath,
-      ];
-      await execFileAsync('python', fbArgs, { timeout: 30000 });
+      ], { timeout: 30000 });
     } else {
       throw err;
     }
