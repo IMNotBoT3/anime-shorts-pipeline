@@ -113,8 +113,14 @@ const SCRIPT_SCHEMA = {
 };
 
 export async function generateScript(quote) {
-  const apiKey = config.openrouter?.apiKey || process.env.OPENROUTER_API_KEY;
+  // Belt and suspenders: ci-config.js writes to config.json, and the env var is
+  // also set directly on the step. Both paths work locally; this ensures CI works
+  // even if the config read has a stale cache from a pre-ci-config import.
+  const apiKey = config.openrouter?.apiKey
+    || process.env.OPENROUTER_API_KEY
+    || '';
   if (!apiKey) throw new Error('No OPENROUTER_API_KEY configured');
+  if (apiKey.length < 10) throw new Error(`API key looks invalid (${apiKey.length} chars)`);
 
   const prompt = buildPrompt(quote);
 
