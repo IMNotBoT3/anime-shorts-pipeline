@@ -88,7 +88,14 @@ export async function uploadToYouTube(videoPath, meta) {
       media: { body: createReadStream(videoPath) },
     });
     const videoId = res.data?.id;
-    if (videoId) console.log(`   ✅ https://youtube.com/shorts/${videoId}`);
+    if (videoId) {
+      // Long-form is a regular watch URL; printing /shorts/ for a 92s
+      // landscape video was misleading in the run log.
+      const url = meta.longForm
+        ? `https://youtube.com/watch?v=${videoId}`
+        : `https://youtube.com/shorts/${videoId}`;
+      console.log(`   ✅ ${url}`);
+    }
     return videoId || null;
   } catch (err) {
     console.error(`   ❌ Upload failed: ${err.message?.split('\n')[0]}`);
