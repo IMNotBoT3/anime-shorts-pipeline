@@ -2,7 +2,7 @@
  * YouTube upload via the Data API v3.
  */
 import { google } from 'googleapis';
-import { readFileSync, createReadStream } from 'node:fs';
+import { readFileSync, createReadStream, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -79,5 +79,40 @@ export async function uploadToYouTube(videoPath, meta) {
   } catch (err) {
     console.error(`   ❌ Upload failed: ${err.message?.split('\n')[0]}`);
     return null;
+  }
+}
+
+/**
+ * Set a custom thumbnail on an uploaded video.
+ *
+ * Without this the API leaves YouTube to auto-pick a frame, which for a 3-minute
+ * compilation means a random mid-scene grab with burned-in captions across it.
+ * Returns true on success; a thumbnail failure must not fail the upload, since
+ * the video itself is already public by then.
+ *
+ * Note: custom thumbnails require the channel to be verified by phone. If the
+ * channel is not yet verified the API rejects this and the video keeps its
+ * auto-generated frame.
+ */
+export async function setThumbnail(videoId, thumbnailPath) {
+  if (!videoId || !thumbnailPath || !existsSync(thumbnailPath)) return false;
+
+  try {
+    const auth = authorise();
+    const yt = google.youtube({ version: 'v3', auth });
+    await yt.thumbnails.set({
+      videoId,
+      media: { body: createReadStream(thumbnailPath) },
+    });
+    console.log(`   ✅ Thumbnail set`);
+    return true;
+  } catch (err) {
+    const msg = err.message?.split('\n')[0] || 'unknown';
+    if (/unverified|not eligible|forbidden/i.test(msg)) {
+      console.warn(`   ⚠ Thumbnail rejected — channel likely needs phone verification: ${msg}`);
+    } else {
+      console.warn(`   ⚠ Thumbnail failed: ${msg}`);
+    }
+    return false;
   }
 }

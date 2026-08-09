@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1280, height=720" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1280px;
+        height: 720px;
+        overflow: hidden;
+        background: #08070b;
+      }
+      /* Montserrat and Inter are on the renderer's auto-resolved list, so they
+         render identically on Windows and on the Ubuntu CI runner. Naming
+         system faces here instead (Arial Black, Impact) fails `check` and
+         silently falls back to a generic font. */
+      body { font-family: Montserrat, sans-serif; }
+
+      /* The fill lives on a full-bleed child, never on the composition root:
+         the producer can drop the root element's own background and render the
+         frame black even though preview looks correct. */
+      #bg {
+        position: absolute;
+        inset: 0;
+        background-image: url("assets/scene-0.jpg");
+        background-size: cover;
+        background-position: center 22%;
+      }
+
+      /* Two scrims: a global one for mood, and a left-weighted one so the title
+         always has contrast regardless of the artwork behind it. */
+      #scrim-global { position: absolute; inset: 0; background: #08070b; opacity: 0.30; }
+      #scrim-left {
+        position: absolute; inset: 0;
+        background: linear-gradient(100deg,
+          rgba(8,7,11,0.94) 0%,
+          rgba(8,7,11,0.85) 36%,
+          rgba(8,7,11,0.34) 64%,
+          rgba(8,7,11,0.08) 100%);
+      }
+
+      #plate {
+        position: absolute;
+        left: 74px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 760px;
+      }
+
+      #eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 22px;
+      }
+      #eyebrow .mark { width: 34px; height: 4px; background: #ffb020; }
+      #eyebrow .label {
+        font-family: Inter, sans-serif;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: #f3ede4;
+        opacity: 0.85;
+      }
+
+      /* The signature: one amber rule holding the whole title block.
+         Vertical padding exists for the checker, not the eye: Montserrat's
+         metrics box is ~1.4x the font size, so a tight line box legitimately
+         overflows it. Padding gives the container room to contain those boxes
+         without loosening the leading. */
+      #title {
+        border-left: 7px solid #ffb020;
+        padding: 22px 0 22px 30px;
+      }
+      #title .line {
+        font-size: 96px;
+        /* Tight leading is the intent for an uppercase-only stack; there are no
+           descenders to collide. Declared via data-layout-allow-overlap. */
+        line-height: 1.06;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+        color: #ffffff;
+        text-shadow: 0 4px 26px rgba(0,0,0,0.8);
+        /* The line breaks are chosen in JS. Without nowrap the browser adds its
+           own, turning a planned 3-line title into 4 and pushing the badge out
+           of the composition. */
+        white-space: nowrap;
+      }
+
+      #badge {
+        margin-top: 30px;
+        display: inline-block;
+        background: #ffb020;
+        color: #14100a;
+        font-family: Inter, sans-serif;
+        font-size: 24px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 12px 22px;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="1"
+      data-width="1280"
+      data-height="720"
+      style="position: relative; width: 1280px; height: 720px; overflow: hidden"
+    >
+      <div id="bg"></div>
+      <div id="scrim-global"></div>
+      <div id="scrim-left"></div>
+
+      <div id="plate">
+        <div id="eyebrow">
+          <div class="mark"></div>
+          <div class="label">Anime Resonance</div>
+        </div>
+        <div id="title" data-layout-allow-overlap><div class="line">LINES THAT</div><div class="line">CHANGED</div><div class="line">EVERYTHING</div></div>
+        <div id="badge">5 Quotes</div>
+      </div>
+    </div>
+
+    <script>
+      // A still frame still owes the runtime exactly one paused timeline at the
+      // root composition id; nothing needs to move.
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
+  </body>
+</html>

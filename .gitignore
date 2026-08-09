@@ -2,3 +2,7 @@ node_modules/
 output/
 .tmp-*
 *.log
+
+# Thumbnail build artifacts: downloaded art and rendered screenshots.
+thumbnail/assets/
+thumbnail/snapshots/

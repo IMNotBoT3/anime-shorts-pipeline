@@ -44,7 +44,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Install Node deps
-        run: npm ci
+        # --omit=dev keeps the HyperFrames toolchain (91 packages, including
+        # sharp and onnxruntime) out of this job. Only the long-form thumbnail
+        # needs it, and this workflow renders Shorts with ffmpeg.
+        run: npm ci --omit=dev
 
       - name: Self-check
         run: npm test

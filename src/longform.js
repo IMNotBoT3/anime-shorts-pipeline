@@ -20,7 +20,8 @@ import { loadQuotes, quoteId, fetchTrendingAnime } from './fetch-quotes.js';
 import { generateVoiceover, getAudioDuration } from './voiceover.js';
 import { selectVoice } from './generate-script.js';
 import { fetchAllImages } from './fetch-images.js';
-import { uploadToYouTube } from './youtube-upload.js';
+import { uploadToYouTube, setThumbnail } from './youtube-upload.js';
+import { buildThumbnail } from './thumbnail.js';
 import { markSeen, isSeen } from './seen-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -329,7 +330,22 @@ async function main() {
     await renderLongform(segments, outputPath, bgmPath);
     console.log(`  Output: ${outputPath}`);
 
-    // 5. Upload
+    // 5. Thumbnail. Built before upload so a failure here is visible while the
+    //    video is still unpublished, but never blocks publishing.
+    let thumbPath = null;
+    try {
+      console.log('\n  Thumbnail...');
+      thumbPath = await buildThumbnail({
+        theme: theme.name,
+        quoteCount: quotes.length,
+        anime: quotes[0]?.anime,
+        outDir: compDir,
+      });
+    } catch (err) {
+      console.warn(`  ⚠ Thumbnail build failed, publishing without one: ${err.message}`);
+    }
+
+    // 6. Upload
     if (!previewMode) {
       console.log('\n  Uploading...');
       // Mark all quotes as seen
@@ -343,6 +359,8 @@ async function main() {
       const videoId = await uploadToYouTube(outputPath, meta);
 
       if (videoId) {
+        if (thumbPath) await setThumbnail(videoId, thumbPath);
+
         const row = [
           new Date().toISOString(), compId,
           `"compilation: ${theme.name}"`, `"${quotes.length} quotes"`,
@@ -354,6 +372,7 @@ async function main() {
       }
     } else {
       console.log(`\n  Preview: ${totalDuration.toFixed(1)}s — not uploaded`);
+      if (thumbPath) console.log(`  Thumbnail: ${thumbPath}`);
     }
   } catch (err) {
     console.error(`\n  ❌ Failed: ${err.message}`);
