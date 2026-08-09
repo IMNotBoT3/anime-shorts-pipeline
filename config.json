@@ -1,0 +1,40 @@
+{
+  "edgeTts": {
+    "voices": {
+      "male_power": "en-US-GuyNeural",
+      "male_emotional": "en-US-DavisNeural",
+      "female_strong": "en-US-JennyNeural",
+      "female_emotional": "en-US-AriaNeural",
+      "narrator": "en-GB-RyanNeural"
+    },
+    "rate": "+5%",
+    "pitch": "-2Hz"
+  },
+  "video": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "channel": {
+    "name": "Anime Resonance",
+    "category": "24",
+    "defaultTags": [
+      "anime",
+      "animequotes",
+      "animeshorts",
+      "motivation",
+      "animespeech",
+      "shorts",
+      "anime_quotes",
+      "inspirational",
+      "otaku"
+    ]
+  },
+  "output": {
+    "dir": "./output"
+  },
+  "poll": {
+    "intervalMinutes": 360,
+    "maxShortsPerRun": 2
+  }
+}

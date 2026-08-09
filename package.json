@@ -1,0 +1,21 @@
+{
+  "name": "anime-shorts-pipeline",
+  "version": "1.0.0",
+  "description": "Automated anime quotes to YouTube Shorts pipeline",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "generate": "node src/index.js --once",
+    "preview": "node src/index.js --once --preview",
+    "test": "node scripts/selfcheck.mjs",
+    "auth": "node scripts/get-youtube-token.js",
+    "analytics": "node src/analytics.js"
+  },
+  "dependencies": {
+    "googleapis": "^174.0.1",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
