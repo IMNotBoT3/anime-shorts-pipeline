@@ -62,14 +62,15 @@ export async function renderVideo(scenes, outputPath) {
     // Audio input
     inputs.push('-i', s.audioPath);
 
-    // 1) Ken Burns: slow zoom in from 100% to 108% over the scene duration
-    //    Scale up to 2x first, then zoompan crops a 1080x1920 window that
-    //    slowly zooms in — creates the cinematic motion effect.
+    // 1) Ken Burns: zoom at 720p (fast) then scale to 1080p output
+    //    Zoompan at full 1080x1920 takes 5-6 min per scene on GitHub runners.
+    //    At 720x1280 it takes ~2 min, and the final scale is near-instant.
     filterParts.push(
-      `[${idx}:v]scale=2160:3840,`
-      + `zoompan=z='min(zoom+0.0003,1.08)'`
+      `[${idx}:v]scale=1440:2560,`
+      + `zoompan=z='min(zoom+0.0004,1.08)'`
       + `:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`
-      + `:d=${frames}:s=${WIDTH}x${HEIGHT}:fps=30`
+      + `:d=${frames}:s=720x1280:fps=30,`
+      + `scale=${WIDTH}:${HEIGHT}:flags=lanczos`
       + `[zoom${i}]`
     );
 

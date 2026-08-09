@@ -56,6 +56,6 @@
   },
   "poll": {
     "intervalMinutes": 360,
-    "maxShortsPerRun": 2
+    "maxShortsPerRun": 1
   }
 }
