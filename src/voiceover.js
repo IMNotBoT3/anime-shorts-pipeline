@@ -95,16 +95,22 @@ export async function generateVoiceover(text, outputPath, voice) {
 }
 
 /**
- * Get audio duration in seconds using ffprobe.
- * ponytail: resolve() fixes CI bug where relative paths fail with "No such file".
+ * Get audio duration in seconds.
+ *
+ * Tries ffprobe, then falls back to parsing ffmpeg's own stderr. The fallback
+ * is not redundant: a broken or missing ffprobe binary silently yielded 0,
+ * which made every scene fall back to the 8s default and desynced the render
+ * from the voiceover. Returning 0 is never acceptable here, so a failure to
+ * measure is thrown rather than swallowed.
  */
 export async function getAudioDuration(filePath) {
   const { resolve } = await import('node:path');
   const absPath = resolve(filePath);
   if (!existsSync(absPath)) {
-    console.warn(`   ⚠ getAudioDuration: file not found: ${absPath}`);
-    return 0;
+    throw new Error(`getAudioDuration: file not found: ${absPath}`);
   }
+
+  // 1. ffprobe — the direct route.
   try {
     const { stdout } = await execFileAsync('ffprobe', [
       '-v', 'error',
@@ -112,11 +118,32 @@ export async function getAudioDuration(filePath) {
       '-of', 'default=nw=1:nk=1',
       absPath,
     ], { timeout: 10000 });
-    const dur = parseFloat(stdout.trim()) || 0;
-    if (dur === 0) console.warn(`   ⚠ getAudioDuration: ffprobe returned 0 for ${absPath}`);
-    return dur;
-  } catch (err) {
-    console.warn(`   ⚠ getAudioDuration ffprobe error: ${err.message}`);
-    return 0;
+    const dur = parseFloat(stdout.trim());
+    if (dur > 0) return dur;
+  } catch {
+    // fall through
   }
+
+  // 2. ffmpeg stderr — "Duration: 00:00:12.34, start: ...". ffmpeg exits 0 on a
+  //    successful decode and non-zero on failure, and prints the header either
+  //    way, so read stderr from both outcomes.
+  const parseDur = (text) => {
+    const m = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(text || '');
+    return m ? (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]) : 0;
+  };
+
+  try {
+    const { stderr } = await execFileAsync('ffmpeg',
+      ['-hide_banner', '-i', absPath, '-f', 'null', '-'], { timeout: 15000 });
+    const dur = parseDur(stderr);
+    if (dur > 0) return dur;
+  } catch (err) {
+    const dur = parseDur(err.stderr);
+    if (dur > 0) return dur;
+  }
+
+  throw new Error(
+    `getAudioDuration: could not measure ${absPath}. `
+    + `ffprobe and ffmpeg both failed — check that ffmpeg is installed and working.`
+  );
 }

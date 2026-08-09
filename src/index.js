@@ -66,9 +66,17 @@ async function processQuote(quote) {
     console.log('  Script...');
     const script = await generateScript(quote);
 
-    // 2. Fetch images
+    // 2. Fetch images. Anime/character context drives the art search — without
+    //    it the search falls back to prose queries and returns stock photos.
+    //    Only the quote scene searches on the character, so the three scenes
+    //    don't all resolve to the same handful of wallpapers.
     console.log('  Images...');
-    await fetchAllImages(script.scenes, storyDir);
+    const imageScenes = script.scenes.map((s, i) => ({
+      imageQuery: s.imageQuery,
+      anime: quote.anime,
+      character: i === 1 ? quote.character : undefined,
+    }));
+    await fetchAllImages(imageScenes, storyDir);
 
     // 3. Generate voiceover per scene
     //    Scene 0 (intro): narrator voice, slight pause at the end for tension

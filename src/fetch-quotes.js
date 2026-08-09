@@ -241,7 +241,8 @@ export async function fetchTrendingAnime(limit = 10) {
 
 // ─── Static bank fallback ────────────────────────────────────────────────────
 
-function loadQuotes() {
+/** Load the curated bank. Exported — longform.js builds compilations from it. */
+export function loadQuotes() {
   try {
     const data = JSON.parse(readFileSync(QUOTES_FILE, 'utf-8'));
     return (data.quotes || []).map((q) => ({ ...q, source: 'bank' }));
