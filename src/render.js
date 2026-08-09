@@ -40,9 +40,9 @@ export async function renderVideo(scenes, outputPath) {
     // Ken Burns zoom on the image
     const frames = Math.ceil(dur * 30);
     filterParts.push(
-      `[${idx}:v]scale=2160:3840,zoompan=z='min(zoom+0.0004,1.06)'`
-      + `:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`
-      + `:d=${frames}:s=${WIDTH}x${HEIGHT}:fps=30[v${i}]`
+      `[${idx}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,`
+      + `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e,`
+      + `setsar=1[v${i}]`
     );
 
     audioParts.push(`[${idx + 1}:a]`);
@@ -80,9 +80,10 @@ export async function renderVideo(scenes, outputPath) {
   ];
 
   try {
-    await execFileAsync('ffmpeg', args, { timeout: 180000 });
+    await execFileAsync('ffmpeg', args, { timeout: 180000, maxBuffer: 10 * 1024 * 1024 });
   } catch (err) {
-    const msg = (err.stderr || err.message || '').slice(-400);
+    const stderr = err.stderr || '';
+    const msg = stderr.slice(-800) || err.message?.slice(-400) || 'unknown error';
     throw new Error(`ffmpeg render failed: ${msg}`);
   }
 
