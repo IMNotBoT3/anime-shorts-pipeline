@@ -62,13 +62,22 @@ export async function renderVideo(scenes, outputPath) {
     // Audio input
     inputs.push('-i', s.audioPath);
 
-    // 1) Ken Burns: zoom at 720p (fast) then scale to 1080p output
-    //    Zoompan at full 1080x1920 takes 5-6 min per scene on GitHub runners.
-    //    At 720x1280 it takes ~2 min, and the final scale is near-instant.
+    // 1) Ken Burns with ALTERNATING directions to prevent visual monotony:
+    //    Scene 0: zoom in (center)
+    //    Scene 1: zoom in from top-left
+    //    Scene 2: zoom in from bottom-right
+    //    This creates visual variety that fights gradual-decline attention loss.
+    const zoomX = i === 0 ? 'iw/2-(iw/zoom/2)'
+      : i === 1 ? 'iw/4-(iw/zoom/4)'
+        : '3*iw/4-(3*iw/zoom/4)';
+    const zoomY = i === 0 ? 'ih/2-(ih/zoom/2)'
+      : i === 1 ? 'ih/4-(ih/zoom/4)'
+        : '3*ih/4-(3*ih/zoom/4)';
+
     filterParts.push(
       `[${idx}:v]scale=1440:2560,`
       + `zoompan=z='min(zoom+0.0004,1.08)'`
-      + `:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`
+      + `:x='${zoomX}':y='${zoomY}'`
       + `:d=${frames}:s=720x1280:fps=30,`
       + `scale=${WIDTH}:${HEIGHT}:flags=lanczos`
       + `[zoom${i}]`
@@ -139,9 +148,19 @@ export async function renderVideo(scenes, outputPath) {
   const aLabels = audioParts.join('');
   filterParts.push(`${aLabels}concat=n=${scenes.length}:v=0:a=1[voice]`);
 
-  // Mix BGM under voice at 12% volume
+  // 3) BGM with emotional swell — louder at the quote scene, quieter elsewhere
+  //    This creates an unconscious "pay attention" cue at the emotional peak.
   if (hasBGM) {
-    filterParts.push(`[${idx}:a]volume=0.12,afade=t=in:st=0:d=2,afade=t=out:st=25:d=5[bgm]`);
+    // Calculate when scene 2 (the quote) starts — that's where the swell peaks
+    const scene1Dur = scenes[0]?.duration || 10;
+    const scene2Start = scene1Dur;
+    const scene2End = scene1Dur + (scenes[1]?.duration || 10);
+
+    filterParts.push(
+      `[${idx}:a]volume='if(between(t,${scene2Start},${scene2End}),0.22,0.10)'`
+      + `:eval=frame,`
+      + `afade=t=in:st=0:d=2,afade=t=out:st=${Math.max(0, scene2End + 5)}:d=5[bgm]`
+    );
     filterParts.push(`[voice][bgm]amix=inputs=2:duration=first:dropout_transition=3[aout]`);
   } else {
     filterParts.push(`[voice]acopy[aout]`);

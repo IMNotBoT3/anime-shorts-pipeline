@@ -46,38 +46,50 @@ export function selectVoice(gender, mood) {
 /**
  * Generate an MP3 from text using edge-tts.
  * Uses slower rate (-5%) for dramatic delivery instead of rushed +5%.
+ * Writes text to a temp file to avoid shell argument parsing issues on Windows.
  */
 export async function generateVoiceover(text, outputPath, voice) {
-  // Slower rate makes it sound dramatic, not rushed/robotic
-  // Use --rate=VALUE and no pitch to avoid argparse issues with negative values
+  const { resolve } = await import('node:path');
+  const absOutput = resolve(outputPath);
+  const tmpFile = absOutput + '.txt';
+  writeFileSync(tmpFile, text);
+
   try {
     try {
       await execFileAsync('edge-tts', [
         '--voice', voice, '--rate=-5%',
-        '--text', text, '--write-media', outputPath,
+        '--file', tmpFile, '--write-media', absOutput,
       ], { timeout: 30000 });
     } catch {
       await execFileAsync('python', ['-m', 'edge_tts',
         '--voice', voice, '--rate=-5%',
-        '--text', text, '--write-media', outputPath,
+        '--file', tmpFile, '--write-media', absOutput,
       ], { timeout: 30000 });
     }
   } catch (err) {
-    // Some voices fail on certain texts — try fallback voice
     const fallback = 'en-US-AndrewMultilingualNeural';
     if (voice !== fallback) {
       console.log(`   ⚠ Voice ${voice} failed, trying ${fallback}`);
-      await execFileAsync('python', ['-m', 'edge_tts',
-        '--voice', fallback, '--rate=-5%',
-        '--text', text, '--write-media', outputPath,
-      ], { timeout: 30000 });
+      try {
+        await execFileAsync('edge-tts', [
+          '--voice', fallback, '--rate=-5%',
+          '--file', tmpFile, '--write-media', absOutput,
+        ], { timeout: 30000 });
+      } catch {
+        await execFileAsync('python', ['-m', 'edge_tts',
+          '--voice', fallback, '--rate=-5%',
+          '--file', tmpFile, '--write-media', absOutput,
+        ], { timeout: 30000 });
+      }
     } else {
       throw err;
     }
+  } finally {
+    try { unlinkSync(tmpFile); } catch {}
   }
 
-  if (!existsSync(outputPath)) {
-    throw new Error(`edge-tts did not produce ${outputPath}`);
+  if (!existsSync(absOutput)) {
+    throw new Error(`edge-tts did not produce ${absOutput}`);
   }
   return outputPath;
 }

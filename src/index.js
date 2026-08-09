@@ -71,12 +71,22 @@ async function processQuote(quote) {
     await fetchAllImages(script.scenes, storyDir);
 
     // 3. Generate voiceover per scene
+    //    Scene 0 (intro): narrator voice, slight pause at the end for tension
+    //    Scene 1 (quote): character voice, the emotional core
+    //    Scene 2 (outro): narrator voice, builds back up
     console.log('  Voiceover...');
     let totalDuration = 0;
     for (let i = 0; i < script.scenes.length; i++) {
       const outPath = join(storyDir, `scene-${i}.mp3`);
-      await generateVoiceover(script.scenes[i].narration, outPath, script.voice);
-      const dur = await getAudioDuration(outPath);
+      // Use character voice for the quote scene (scene 1), narrator for intro/outro
+      const voice = i === 1 ? script.voice : 'en-US-AndrewMultilingualNeural';
+      await generateVoiceover(script.scenes[i].narration, outPath, voice);
+
+      // Add a 0.8s silence pad after scene 0 (the intro) — creates dramatic pause
+      // before the quote hits. This is the "breath before impact" that separates
+      // a dramatic reading from a robotic one.
+      let dur = await getAudioDuration(outPath);
+      if (i === 0) dur += 0.8;
       totalDuration += dur;
       script.scenes[i].duration = dur;
     }
