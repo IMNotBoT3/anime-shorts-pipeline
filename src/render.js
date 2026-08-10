@@ -121,8 +121,11 @@ function drawLines({ lines, dir, tag, fontSize, centerY, boxAlpha, enable }) {
 /**
  * @param {Array} scenes - [{imagePath, audioPath, duration, narration}]
  * @param {string} outputPath - mp4 destination
+ * @param {object} [opts]
+ * @param {object} [opts.subGoal] - {count, goal, text} from sub-count.js. When
+ *   provided, burns a "X/100 🎯 Subscribe" badge in the top-right corner.
  */
-export async function renderVideo(scenes, outputPath) {
+export async function renderVideo(scenes, outputPath, { subGoal } = {}) {
   const workDir = dirname(resolve(outputPath));
   const inputs = [];
   const filterParts = [];
@@ -226,18 +229,34 @@ export async function renderVideo(scenes, outputPath) {
 
   // Crossfade the clips into one track.
   if (scenes.length === 1) {
-    filterParts.push(`[v0]null[vout]`);
+    filterParts.push(`[v0]null[vraw]`);
   } else {
     let prev = 'v0';
     let offset = (scenes[0].duration || 8) - XFADE_DUR;
     for (let i = 1; i < scenes.length; i++) {
-      const out = i === scenes.length - 1 ? 'vout' : `xf${i - 1}`;
+      const out = i === scenes.length - 1 ? 'vraw' : `xf${i - 1}`;
       filterParts.push(
         `[${prev}][v${i}]xfade=transition=fade:duration=${XFADE_DUR}:offset=${offset.toFixed(2)}[${out}]`
       );
       prev = out;
       offset += (scenes[i].duration || 8) - XFADE_DUR;
     }
+  }
+
+  // Subscriber goal badge — top-right corner, persists across the whole video.
+  // "34/100 🎯 Subscribe" in a semi-transparent pill. Only added when the
+  // caller passes subGoal data; CI fetches it from the YouTube API once per run.
+  if (subGoal && subGoal.text) {
+    const subFile = join(workDir, 'sub-goal.txt');
+    writeFileSync(subFile, `${subGoal.text} Subscribe`, 'utf-8');
+    let subDraw = `drawtext=textfile=${escapeFilterPath(subFile)}`
+      + `:fontsize=26:fontcolor=white`
+      + `:box=1:boxcolor=black@0.6:boxborderw=10|16`
+      + `:x=w-text_w-40:y=50`;
+    if (FONT) subDraw += `:fontfile=${escapeFilterPath(FONT)}`;
+    filterParts.push(`[vraw]${subDraw}[vout]`);
+  } else {
+    filterParts.push(`[vraw]null[vout]`);
   }
 
   const hasBGM = existsSync(BGM_PATH);

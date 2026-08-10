@@ -21,6 +21,7 @@ import { generateVoiceover, getAudioDuration } from './voiceover.js';
 import { renderVideo } from './render.js';
 import { uploadToYouTube } from './youtube-upload.js';
 import { markSeen } from './seen-store.js';
+import { getSubGoal } from './sub-count.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(readFileSync(join(__dirname, '..', 'config.json'), 'utf-8'));
@@ -46,6 +47,10 @@ async function main() {
   console.log('  Picking topics (quotes + news + rankings + debates)...\n');
   const topics = await pickTopics(MAX_SHORTS, { skipSaturation });
 
+  // Fetch subscriber count once per run for the goal overlay
+  const subGoal = await getSubGoal(100).catch(() => null);
+  if (subGoal) console.log(`  📊 Subscribers: ${subGoal.count}/${subGoal.goal} (${subGoal.percentage}%)\n`);
+
   if (!topics.length) {
     console.log('  No viable topics found.');
     return;
@@ -62,7 +67,7 @@ async function main() {
   let published = 0;
   for (const topic of topics) {
     try {
-      await processTopic(topic);
+      await processTopic(topic, subGoal);
       published++;
     } catch (err) {
       console.error(`  ❌ Failed: ${err.message}\n`);
@@ -73,7 +78,7 @@ async function main() {
   console.log(`  Done: ${published}/${topics.length} Shorts ${previewMode ? 'rendered' : 'published'}`);
 }
 
-async function processTopic(topic) {
+async function processTopic(topic, subGoal) {
   console.log(`\n  ──────────────────────────────────`);
   console.log(`  [${topic.type.toUpperCase()}] ${topic.title.slice(0, 60)}`);
   if (topic.anime) console.log(`  Anime: ${topic.anime}`);
@@ -129,7 +134,7 @@ async function processTopic(topic) {
     })).filter((s) => existsSync(s.imagePath) && existsSync(s.audioPath));
 
     if (!renderScenes.length) throw new Error('No complete scenes to render');
-    await renderVideo(renderScenes, outputFile);
+    await renderVideo(renderScenes, outputFile, { subGoal });
     console.log(`  Video: ${outputFile}`);
 
     // 5. Upload
