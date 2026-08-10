@@ -11,7 +11,9 @@
     "longform:preview": "node src/longform.js --preview",
     "test": "node scripts/selfcheck.mjs",
     "auth": "node scripts/get-youtube-token.js",
-    "analytics": "node src/analytics.js"
+    "analytics": "node src/analytics.js",
+    "longform:trending": "node src/longform-trending.js",
+    "longform:trending:preview": "node src/longform-trending.js --preview"
   },
   "dependencies": {
     "googleapis": "^174.0.1",

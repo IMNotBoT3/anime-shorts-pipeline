@@ -190,3 +190,82 @@ export async function generateScript(quote) {
 
   return script;
 }
+
+/**
+ * Generate a script for non-quote content: rankings, news, debates, reactions.
+ * Same output shape as generateScript() so the pipeline handles them uniformly.
+ */
+export async function generateTopicScript(topic) {
+  const rawKey = (config.openrouter?.apiKey || process.env.OPENROUTER_API_KEY || '')
+    .replace(/^["']|["']$/g, '').trim();
+  if (!rawKey || rawKey.length < 10) throw new Error('No valid OPENROUTER_API_KEY');
+
+  const typeInstructions = {
+    ranking: `This is a "Top 5" or ranking video. Structure it as a countdown — each entry gets one scene. Create tension between entries. The hook must promise a payoff ("Wait for #1"). Each entry: name the character/anime/moment, say WHY it earns this spot in one punchy line. End with a call for disagreement ("Comment your #1").`,
+    news: `This is breaking anime news. The hook must convey URGENCY — something just happened that anime fans need to know. Give the key facts fast: what happened, which anime/studio, why it matters. End by asking what viewers think or teasing what's next.`,
+    debate: `This is a hot take / unpopular opinion. The hook must be PROVOCATIVE — state the take boldly enough that viewers stop to argue. Back it up with 2-3 specific examples. End with "Agree or fight me in the comments" energy.`,
+    reaction: `This is a reaction to a specific anime moment. The hook must reference the moment WITHOUT spoiling it. Build the context, describe the impact, land on why it matters. Make the viewer feel the weight of what happened.`,
+  };
+
+  const prompt = `You write YouTube Shorts scripts for "Anime Resonance" — an anime channel covering quotes, news, rankings, and hot takes.
+
+TOPIC: "${topic.title}"
+TYPE: ${topic.type}
+${topic.anime ? `ANIME: ${topic.anime}` : ''}
+${topic.url ? `SOURCE URL: ${topic.url}` : ''}
+
+${typeInstructions[topic.type] || typeInstructions.ranking}
+
+Write a 3-5 scene script for a 45-60 second Short. Total: 90-120 words across all scenes.
+
+THE FIRST 3 SECONDS DECIDE EVERYTHING. 87% of viewers swipe before scene 2.
+Your hook (first 8-10 words) must stop the thumb INSTANTLY — create an information gap
+or emotional tension that makes swiping feel like missing out.
+
+Each scene needs:
+- narration: the spoken text (10-25 words)
+- imageQuery: a search query for the background (specific anime characters/scenes, NOT generic)
+
+YOUTUBE METADATA:
+- title: under 70 chars, includes #shorts, hooks curiosity
+- description: 3-4 lines, key facts, subscribe CTA
+- hashtags: 5 relevant hashtags
+- tags: 25-30 discovery tags under 500 chars total
+
+Return ONLY valid JSON:
+{
+  "scenes": [{"narration": "...", "imageQuery": "..."}],
+  "youtube": {"title": "...", "description": "...", "hashtags": [...], "tags": [...]}
+}`;
+
+  const res = await fetch(OPENROUTER_API, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${rawKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://github.com/IMNotBoT3/anime-shorts-pipeline',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 4000,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Empty completion');
+
+  const script = JSON.parse(content);
+  script.voice = 'en-US-AndrewMultilingualNeural'; // narrator voice for non-quote content
+  script.anime = topic.anime || '';
+
+  const totalWords = (script.scenes || []).reduce((n, s) => n + (s.narration || '').split(/\s+/).length, 0);
+  console.log(`   ${(script.scenes || []).length} scenes, ${totalWords} words`);
+  console.log(`   YT: ${script.youtube?.title || '(no title)'}`);
+
+  return script;
+}
