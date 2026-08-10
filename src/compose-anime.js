@@ -234,6 +234,7 @@ export function buildAnimeComposition({ scenes, topic, subGoal, outputDir }) {
       color: rgba(255,255,255,0.7); letter-spacing: 4px;
       text-transform: uppercase;
       text-shadow: 0 2px 16px rgba(0,0,0,0.9);
+      z-index: 50;
     }
     .sub-goal {
       position: absolute; top: 48px; left: 50%; transform: translateX(-50%);
@@ -242,6 +243,7 @@ export function buildAnimeComposition({ scenes, topic, subGoal, outputDir }) {
       border-radius: 12px; letter-spacing: 1.5px;
       backdrop-filter: blur(4px);
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      z-index: 50;
     }
     .progress-track { position: absolute; top: 0; left: 0; right: 0; height: 5px; background: rgba(255,255,255,0.15); z-index: 100; }
     .progress-bar { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: ${ACCENT}; transform-origin: left center; transform: scaleX(0); }

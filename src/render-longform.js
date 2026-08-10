@@ -181,6 +181,26 @@ export async function renderLongformTrending(segments, outputPath, topic) {
       });
     }
 
+    // Watermark + sub goal — persistent on every segment
+    const watermarkFile = join(workDir, 'watermark.txt');
+    if (!existsSync(watermarkFile)) writeFileSync(watermarkFile, 'ANIME RESONANCE', 'utf-8');
+    let wm = `drawtext=textfile=${escapeFilterPath(watermarkFile)}`
+      + `:fontsize=22:fontcolor=white@0.7`
+      + `:x=(w-text_w)/2:y=h-46`;
+    if (FONT) wm += `:fontfile=${escapeFilterPath(FONT)}`;
+    draws.push(wm);
+
+    if (topic.subGoal?.text) {
+      const subFile = join(workDir, 'sub-goal.txt');
+      if (!existsSync(subFile)) writeFileSync(subFile, `${topic.subGoal.text} Subscribe`, 'utf-8');
+      let sg = `drawtext=textfile=${escapeFilterPath(subFile)}`
+        + `:fontsize=24:fontcolor=white`
+        + `:box=1:boxcolor=black@0.6:boxborderw=10|18`
+        + `:x=(w-text_w)/2:y=36`;
+      if (FONT) sg += `:fontfile=${escapeFilterPath(FONT)}`;
+      draws.push(sg);
+    }
+
     const drawChain = draws.length ? ',' + draws.join(',') : '';
     filterParts.push(
       `[bg${i}][fg${i}]overlay=(W-w)/2:(H-h)/2:format=auto,`

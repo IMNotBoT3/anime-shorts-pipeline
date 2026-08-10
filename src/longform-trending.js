@@ -32,6 +32,7 @@ import { uploadToYouTube, setThumbnail } from './youtube-upload.js';
 import { buildThumbnail } from './thumbnail.js';
 import { markSeen } from './seen-store.js';
 import { checkSaturation } from './saturation-check.js';
+import { getSubGoal } from './sub-count.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(readFileSync(join(__dirname, '..', 'config.json'), 'utf-8'));
@@ -220,6 +221,10 @@ async function main() {
     // 4. Render — uses the existing longform renderer (blurred backdrop + captions)
     console.log('\n  Rendering...');
 
+    // Fetch sub count for the watermark overlay
+    const subGoal = await getSubGoal(100).catch(() => null);
+    if (subGoal) console.log(`  📊 Subscribers: ${subGoal.count}/${subGoal.goal}`);
+
     // Import the render function from longform.js dynamically to reuse its
     // proven filter graph (blurred backdrop, captions, crossfade, BGM).
     // We need to call renderLongform which is module-private, so we pass
@@ -249,7 +254,7 @@ async function main() {
     // The simplest path: write the segments to disk and call the render chain.
     // This reuses everything already built and tested.
     const { renderLongformTrending } = await import('./render-longform.js');
-    await renderLongformTrending(renderSegments, outputPath, topic);
+    await renderLongformTrending(renderSegments, outputPath, { ...topic, subGoal });
 
     console.log(`  Output: ${outputPath}`);
 
