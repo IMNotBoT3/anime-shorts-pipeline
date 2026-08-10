@@ -18,10 +18,11 @@ import { pickTopics } from './pick-topics.js';
 import { generateScript, generateTopicScript } from './generate-script.js';
 import { fetchAllImages } from './fetch-images.js';
 import { generateVoiceover, getAudioDuration } from './voiceover.js';
-import { renderVideo } from './render.js';
+import { buildAnimeComposition } from './compose-anime.js';
 import { uploadToYouTube } from './youtube-upload.js';
 import { markSeen } from './seen-store.js';
 import { getSubGoal } from './sub-count.js';
+import { transcribeAllScenes } from './transcribe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(readFileSync(join(__dirname, '..', 'config.json'), 'utf-8'));
@@ -108,9 +109,10 @@ async function processTopic(topic, subGoal) {
     }));
     await fetchAllImages(imageScenes, storyDir);
 
-    // 3. Generate voiceover per scene
+    // 3. Generate voiceover per scene (with word timestamps for karaoke)
     console.log('  Voiceover...');
     let totalDuration = 0;
+    const audioPaths = [];
     for (let i = 0; i < script.scenes.length; i++) {
       const outPath = join(storyDir, `scene-${i}.mp3`);
       const voice = script.scenes[i].voice || script.voice || 'en-US-AndrewMultilingualNeural';
@@ -120,21 +122,51 @@ async function processTopic(topic, subGoal) {
       if (i === 0) dur += 0.8; // dramatic pause after intro
       totalDuration += dur;
       script.scenes[i].duration = dur;
+      audioPaths.push(outPath);
     }
     console.log(`  Duration: ${totalDuration.toFixed(1)}s`);
 
-    // 4. Render video
-    const outputFile = join(storyDir, `anime-short-${topic.id}.mp4`);
-    console.log('  Render...');
-    const renderScenes = script.scenes.map((s, i) => ({
-      imagePath: join(storyDir, `scene-${i}.jpg`),
-      audioPath: join(storyDir, `scene-${i}.mp3`),
-      duration: s.duration,
-      narration: s.narration,
-    })).filter((s) => existsSync(s.imagePath) && existsSync(s.audioPath));
+    // 4. Get word-level timestamps for karaoke captions
+    console.log('  Word sync...');
+    const wordTimestamps = transcribeAllScenes(audioPaths);
 
-    if (!renderScenes.length) throw new Error('No complete scenes to render');
-    await renderVideo(renderScenes, outputFile, { subGoal });
+    // 5. Build HyperFrames composition (HTML + GSAP animation)
+    console.log('  Composing...');
+    const compDir = join(storyDir, 'composition');
+    const compositionScenes = script.scenes.map((s, i) => ({
+      narration: s.narration,
+      duration: s.duration,
+      imagePath: join(storyDir, `scene-${i}.jpg`),
+      audioPath: audioPaths[i],
+      words: wordTimestamps[i] || s.narration.split(/\s+/).map(w => ({ text: w, start: null, end: null })),
+    }));
+
+    buildAnimeComposition({
+      scenes: compositionScenes,
+      topic,
+      subGoal,
+      outputDir: compDir,
+    });
+
+    // 6. Render with HyperFrames CLI
+    const outputFile = join(storyDir, `anime-short-${topic.id}.mp4`);
+    console.log('  Render (HyperFrames)...');
+
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execFileAsync = promisify(execFile);
+
+    // Use the local hyperframes CLI (installed as devDependency)
+    const hfCli = join(__dirname, '..', 'node_modules', 'hyperframes', 'dist', 'cli.js');
+    if (!existsSync(hfCli)) {
+      throw new Error('hyperframes CLI not found — run: npm install');
+    }
+
+    await execFileAsync(process.execPath, [
+      hfCli, 'render', compDir, '-o', outputFile,
+    ], { timeout: 600000, maxBuffer: 20 * 1024 * 1024 });
+
+    if (!existsSync(outputFile)) throw new Error('HyperFrames render produced no output');
     console.log(`  Video: ${outputFile}`);
 
     // 5. Upload

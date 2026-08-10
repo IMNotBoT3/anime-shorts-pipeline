@@ -44,25 +44,58 @@ export function selectVoice(gender, mood) {
 }
 
 /**
- * Generate an MP3 from text using edge-tts.
- * Uses slower rate (-5%) for dramatic delivery instead of rushed +5%.
- * Writes text to a temp file to avoid shell argument parsing issues on Windows.
+ * Generate an MP3 + word timestamps from text using edge-tts.
+ *
+ * Uses the Python tts_word_sync.py script which produces both the audio AND
+ * a .words.json file with per-word timing. These timestamps power the
+ * word-by-word karaoke captions in the HyperFrames composition — without them
+ * the captions fall back to proportional timing which looks mechanical.
+ *
+ * Rate is -5% for dramatic delivery (not rushed like HotDrop's +10%).
  */
+const TTS_SCRIPT = join(__dirname, 'tts_word_sync.py');
+
 export async function generateVoiceover(text, outputPath, voice) {
   const { resolve } = await import('node:path');
   const absOutput = resolve(outputPath);
+  const wordsPath = absOutput.replace('.mp3', '.words.json');
+
+  // Try the word-sync Python script first (produces .mp3 + .words.json)
+  try {
+    // Write text to file to avoid shell quoting issues on Windows
+    const tmpTextFile = absOutput + '.input.txt';
+    writeFileSync(tmpTextFile, text);
+    
+    await execFileAsync('python', [
+      TTS_SCRIPT,
+      text,
+      absOutput,
+      wordsPath,
+      voice || 'en-US-AndrewMultilingualNeural',
+      '-5%',
+    ], { timeout: 45000 });
+    
+    try { unlinkSync(tmpTextFile); } catch {}
+    
+    if (existsSync(absOutput)) return outputPath;
+  } catch {
+    // Fall through to basic edge-tts
+  }
+
+  // Fallback: basic edge-tts without word timestamps
+  console.log('   ⚠ Word-sync TTS failed, using basic edge-tts (captions will use proportional timing)');
   const tmpFile = absOutput + '.txt';
   writeFileSync(tmpFile, text);
 
   try {
     try {
       await execFileAsync('edge-tts', [
-        '--voice', voice, '--rate=-5%',
+        '--voice', voice || 'en-US-AndrewMultilingualNeural', '--rate=-5%',
         '--file', tmpFile, '--write-media', absOutput,
       ], { timeout: 30000 });
     } catch {
       await execFileAsync('python', ['-m', 'edge_tts',
-        '--voice', voice, '--rate=-5%',
+        '--voice', voice || 'en-US-AndrewMultilingualNeural', '--rate=-5%',
         '--file', tmpFile, '--write-media', absOutput,
       ], { timeout: 30000 });
     }
@@ -92,6 +125,21 @@ export async function generateVoiceover(text, outputPath, voice) {
     throw new Error(`edge-tts did not produce ${absOutput}`);
   }
   return outputPath;
+}
+
+/**
+ * Read word timestamps for a scene's audio.
+ * Returns [{word, start, end}] or null if no .words.json exists.
+ */
+export function getWordTimestamps(audioPath) {
+  const wordsPath = String(audioPath).replace('.mp3', '.words.json');
+  if (!existsSync(wordsPath)) return null;
+  try {
+    const data = JSON.parse(readFileSync(wordsPath, 'utf-8'));
+    return data.length > 0 ? data : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
