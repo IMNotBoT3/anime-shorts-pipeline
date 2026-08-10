@@ -138,7 +138,9 @@ async function processTopic(topic, subGoal) {
       duration: s.duration,
       imagePath: join(storyDir, `scene-${i}.jpg`),
       audioPath: audioPaths[i],
-      words: wordTimestamps[i] || s.narration.split(/\s+/).map(w => ({ text: w, start: null, end: null })),
+      words: (wordTimestamps[i] || []).length
+        ? wordTimestamps[i].map(w => ({ text: w.text || w.word || '', start: w.start, end: w.end }))
+        : s.narration.split(/\s+/).filter(Boolean).map(w => ({ text: w, start: null, end: null })),
     }));
 
     buildAnimeComposition({

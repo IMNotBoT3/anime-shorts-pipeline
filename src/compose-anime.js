@@ -82,7 +82,17 @@ export function buildAnimeComposition({ scenes, topic, subGoal, outputDir }) {
     for (let j = 0; j < i; j++) start += scenes[j].duration;
 
     // Tokenize narration into words for karaoke
-    const words = s.words || s.narration.split(/\s+/).map(w => ({ text: w, start: null, end: null }));
+    // tts_word_sync.py writes {word, start, end}; normalize to {text, start, end}
+    let words;
+    if (s.words && Array.isArray(s.words) && s.words.length > 0) {
+      words = s.words.map(w => ({
+        text: w.text || w.word || '',
+        start: w.start ?? null,
+        end: w.end ?? null,
+      }));
+    } else {
+      words = (s.narration || '').split(/\s+/).filter(Boolean).map(w => ({ text: w, start: null, end: null }));
+    }
 
     return { ...s, start, imgName, audioName, words };
   });
