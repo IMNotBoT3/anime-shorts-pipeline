@@ -37,4 +37,9 @@ if __name__ == "__main__":
     voice = sys.argv[4] if len(sys.argv) > 4 else "en-US-AndrewNeural"
     rate = sys.argv[5] if len(sys.argv) > 5 else "+10%"
     
+    # If --from-file flag is present, read text from the file path in argv[1]
+    if "--from-file" in sys.argv:
+        with open(text, "r", encoding="utf-8") as f:
+            text = f.read().strip()
+    
     asyncio.run(generate(text, audio_path, words_path, voice, rate))

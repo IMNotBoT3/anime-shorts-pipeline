@@ -62,17 +62,19 @@ export async function generateVoiceover(text, outputPath, voice) {
 
   // Try the word-sync Python script first (produces .mp3 + .words.json)
   try {
-    // Write text to file to avoid shell quoting issues on Windows
+    // Write text to file — passing long narration as a CLI arg hits
+    // ENAMETOOLONG on Windows when the text exceeds ~8000 chars.
     const tmpTextFile = absOutput + '.input.txt';
-    writeFileSync(tmpTextFile, text);
+    writeFileSync(tmpTextFile, text, 'utf-8');
     
     await execFileAsync('python', [
       TTS_SCRIPT,
-      text,
+      tmpTextFile,  // pass the FILE path, not the text itself
       absOutput,
       wordsPath,
       voice || 'en-US-AndrewMultilingualNeural',
       '-5%',
+      '--from-file',  // flag telling the script to read text from file
     ], { timeout: 45000 });
     
     try { unlinkSync(tmpTextFile); } catch {}
