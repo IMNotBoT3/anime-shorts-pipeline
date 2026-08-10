@@ -248,11 +248,49 @@ export async function renderVideo(scenes, outputPath) {
   if (hasBGM) {
     const s2Start = scenes[0]?.duration || 10;
     const s2End = s2Start + (scenes[1]?.duration || 10);
+    const bgmEnd = s2End + 5;
+
+    // Three things here are load-bearing; do not drop them:
+    //
+    // 1. `aloop` — assets/bgm.mp3 is only 30s. A 3-scene Short already exceeds
+    //    that, so without looping the bed simply stops partway through. atrim
+    //    caps the infinite loop so the graph still terminates.
+    // 2. `loudnorm` — bgm.mp3 ships mastered ~30dB too quiet (RMS -46.6 dBFS).
+    //    Normalising first makes the dB offsets below source-independent, so
+    //    they keep working if the asset is ever replaced with a proper master.
+    //    A bare multiplier would silently blow up or vanish on a new file.
+    // 3. `normalize=0` on amix — amix DIVIDES every input by the input count
+    //    unless told otherwise. With two inputs that is -6.02dB off BOTH the
+    //    bed and the narration, i.e. the old code made the whole video 6dB
+    //    quieter while adding nothing audible. Removing normalize=0 puts the
+    //    bed back under the AAC noise floor and re-quiets the voice.
+    //
+    // -22dB base / -16dB under the quote scene keeps the 6dB emotional swell
+    // the old 0.10 -> 0.22 pair encoded, landing the bed ~14dB under narration.
+    //
+    // ponytail: BGM loop-seam fix. bgm.mp3 is 30.00s with a baked-in fade-out
+    // starting ~26s. Without trimming, aloop splices that decay onto the start,
+    // causing -68.8 dBFS dips at every 30s loop point. The naive fix (atrim
+    // before aloop) still fails because loudnorm's adaptive gain rider reacts
+    // to the sample-level discontinuity at the aloop splice with a ~20dB dip.
+    // The working fix: run loudnorm on the full 26s flat segment, then discard
+    // the first/last 2s (where loudnorm has start/end boundary transients),
+    // yielding a clean 22s normalized segment. aloop then loops that seamlessly
+    // — loudnorm never sees the splice, and the splice has no discontinuity.
+    // Ceiling: 22s loop length. Upgrade path: replace bgm.mp3 with a properly
+    // mastered seamless loop file; remove the atrim/loudnorm/interior-trim.
+    const BGM_TRIM_END = 26.0;     // where the baked-in fade starts
+    const BGM_INTERIOR_START = 2;  // discard loudnorm's start-of-stream ramp
+    const BGM_INTERIOR_END = 24;   // discard loudnorm's end-of-stream ramp
     filterParts.push(
-      `[${idx}:a]volume='if(between(t,${s2Start},${s2End}),0.22,0.10)':eval=frame,`
-      + `afade=t=in:st=0:d=2,afade=t=out:st=${Math.max(0, s2End + 5)}:d=5[bgm]`
+      `[${idx}:a]atrim=0:${BGM_TRIM_END.toFixed(2)},asetpts=N/SR/TB,`
+      + `loudnorm=I=-16:TP=-1.5:LRA=11,`
+      + `atrim=${BGM_INTERIOR_START}:${BGM_INTERIOR_END},asetpts=N/SR/TB,`
+      + `aloop=loop=-1:size=2147483647,atrim=0:${(bgmEnd + 5).toFixed(2)},`
+      + `volume='if(between(t,${s2Start},${s2End}),-16dB,-22dB)':eval=frame,`
+      + `afade=t=in:st=0:d=2,afade=t=out:st=${Math.max(0, bgmEnd)}:d=5[bgm]`
     );
-    filterParts.push(`[voice][bgm]amix=inputs=2:duration=first:dropout_transition=3[aout]`);
+    filterParts.push(`[voice][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]`);
   } else {
     filterParts.push(`[voice]anull[aout]`);
   }

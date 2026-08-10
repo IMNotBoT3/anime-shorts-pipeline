@@ -11,7 +11,7 @@
  *
  * Themes come from AniList trending genres or are specified manually.
  */
-import { existsSync, mkdirSync, rmSync, appendFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fetch from 'node-fetch';
@@ -35,6 +35,7 @@ const LOG_FILE = join(__dirname, '..', 'published.csv');
 const previewMode = process.argv.includes('--preview');
 const themeArg = process.argv.find(a => a.startsWith('--theme'));
 const manualTheme = themeArg ? process.argv[process.argv.indexOf(themeArg) + 1] : null;
+
 
 /**
  * Predefined themes that work well for compilations.
@@ -82,6 +83,7 @@ function pickThemeAndQuotes() {
 
   return null;
 }
+
 
 /**
  * Generate intro/transition/outro narration for the compilation.
@@ -149,6 +151,165 @@ Return ONLY valid JSON:
   return JSON.parse(content);
 }
 
+
+// ─── On-screen text (16:9 long-form treatment) ───────────────────────────────
+//
+// Deliberately NOT word-by-word karaoke: that is a vertical-feed idiom and
+// looks amateur at 1920x1080. Landscape gets a bottom-anchored plate that hugs
+// the text, plus an orange rank pill so the video reads as a ranked list at a
+// glance.
+
+const ACCENT = '0xff6600';   // pill orange
+const PLATE = '0x07090c';    // near-black plate
+
+const CAP_SIZE = 40;
+const CAP_LINE_H = Math.round(CAP_SIZE * 1.34);  // 54px — lines stack flush
+const CAP_CHARS = 52;                            // per the HotDrop spec
+const CAP_MAX_LINES = 2;
+const CAP_BAND_BOTTOM = 40;                      // band sits 40px off the floor
+
+const PILL_SIZE = 30;
+const PILL_PAD_X = 20;
+const PILL_PAD_Y = 9;
+const TITLE_SIZE = 42;
+const TEXT_LEFT = 96;
+const ROW_BOTTOM = 210;                          // clear of the caption band
+
+/**
+ * First bold font that actually exists here. With no fontfile ffmpeg silently
+ * falls back to a monospace terminal face, which looks broken.
+ */
+const FONT_CANDIDATES = [
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',            // Linux CI
+  '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+  '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+  'C:/Windows/Fonts/segoeuib.ttf',                                    // local dev
+  'C:/Windows/Fonts/arialbd.ttf',
+];
+const FONT = FONT_CANDIDATES.find((f) => existsSync(f)) || null;
+
+/**
+ * Escape a path for the filter graph. A Windows drive colon needs a DOUBLED
+ * backslash to survive both the option tokenizer and the filter parser.
+ */
+function escapeFilterPath(p) {
+  return resolve(p).replace(/\\/g, '/').replace(/:/g, '\\\\:');
+}
+
+/** Greedy word wrap — drawtext cannot wrap. */
+function wrapText(text, maxChars) {
+  const words = String(text).trim().split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    if (!line) { line = w; continue; }
+    if ((line + ' ' + w).length <= maxChars) line += ' ' + w;
+    else { lines.push(line); line = w; }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+
+/** Wrapped lines grouped into blocks of at most 2, shown in succession. */
+function captionBlocks(text) {
+  const lines = wrapText(text, CAP_CHARS);
+  const blocks = [];
+  for (let i = 0; i < lines.length; i += CAP_MAX_LINES) {
+    blocks.push(lines.slice(i, i + CAP_MAX_LINES));
+  }
+  return blocks;
+}
+
+/**
+ * One drawtext per line, never a newline inside a textfile — a newline renders
+ * as a tofu glyph in ffmpeg 8.x. textfile= also means no apostrophe, colon or
+ * percent in the quote text can break the graph.
+ *
+ * ponytail: text is burned per-segment with drawtext rather than an ASS track.
+ * Ceiling: no italics or per-word timing. Upgrade path: switch to libass if the
+ * caption design ever needs either.
+ */
+function drawCaptionBlock({ lines, dir, tag, enable, frameH }) {
+  const bandBottom = frameH - CAP_BAND_BOTTOM;
+  return lines.map((text, n) => {
+    const file = join(dir, `${tag}-${n}.txt`);
+    writeFileSync(file, text, 'utf-8');
+    // Text grows upward from the bottom of the band; blocks stack flush so two
+    // lines read as one continuous plate.
+    const y = bandBottom - (lines.length - n) * CAP_LINE_H;
+    let f = `drawtext=textfile=${escapeFilterPath(file)}`
+      + `:fontsize=${CAP_SIZE}:fontcolor=white`
+      + `:shadowx=0:shadowy=2:shadowcolor=black@0.55`
+      + `:box=1:boxcolor=${PLATE}@0.78:boxborderw=3|18`
+      + `:x=(w-text_w)/2:y=${y}`;
+    if (FONT) f += `:fontfile=${escapeFilterPath(FONT)}`;
+    if (enable) f += `:enable='${enable}'`;
+    return f;
+  });
+}
+
+
+/**
+ * Orange rank pill + anime/character title, above the caption band. This is
+ * the ranked-list signal: quote 3 reads "3." for every one of its segments.
+ */
+function drawRankRow({ number, title, dir, tag, frameH }) {
+  const parts = [];
+  const rowBottom = frameH - ROW_BOTTOM;
+  const pillY = rowBottom - PILL_SIZE - PILL_PAD_Y;
+
+  let pill = `drawtext=text=${number}.`
+    + `:fontsize=${PILL_SIZE}:fontcolor=white`
+    + `:box=1:boxcolor=${ACCENT}@1:boxborderw=${PILL_PAD_Y}|${PILL_PAD_X}`
+    + `:x=${TEXT_LEFT}:y=${pillY}`;
+  if (FONT) pill += `:fontfile=${escapeFilterPath(FONT)}`;
+  parts.push(pill);
+
+  if (title) {
+    // Pill width is not knowable inside the graph, so the title starts at a
+    // fixed offset wide enough for a two-digit rank plus its padding.
+    const file = join(dir, `${tag}-title.txt`);
+    writeFileSync(file, String(title).slice(0, 46), 'utf-8');
+    const titleY = rowBottom - PILL_SIZE - PILL_PAD_Y - Math.round((TITLE_SIZE - PILL_SIZE) / 2);
+    let t = `drawtext=textfile=${escapeFilterPath(file)}`
+      + `:fontsize=${TITLE_SIZE}:fontcolor=white`
+      + `:shadowx=0:shadowy=2:shadowcolor=black@0.6`
+      + `:x=${TEXT_LEFT + 116}:y=${titleY}`;
+    if (FONT) t += `:fontfile=${escapeFilterPath(FONT)}`;
+    parts.push(t);
+  }
+  return parts;
+}
+
+/**
+ * Every drawtext for one segment. `hold` is segment-local: the chain runs after
+ * setpts=PTS-STARTPTS, so enable windows are 0..hold, not global time.
+ */
+function segmentTextFilters(s, i, dir, hold, frameH) {
+  const parts = [];
+
+  if (s.quoteNumber) {
+    const title = [s.anime, s.character].filter(Boolean).join(' — ');
+    parts.push(...drawRankRow({ number: s.quoteNumber, title, dir, tag: `rank-${i}`, frameH }));
+  }
+
+  const text = (s.caption || '').trim();
+  if (text) {
+    const blocks = captionBlocks(text);
+    const share = hold / blocks.length;
+    blocks.forEach((lines, b) => {
+      // A single block holds for the whole segment; several split it evenly.
+      const enable = blocks.length === 1
+        ? null
+        : `between(t,${(b * share).toFixed(2)},${((b + 1) * share).toFixed(2)})`;
+      parts.push(...drawCaptionBlock({ lines, dir, tag: `cap-${i}-${b}`, enable, frameH }));
+    });
+  }
+  return parts;
+}
+
+
 /**
  * Render the long-form video using ffmpeg.
  * Structure: intro → (setup + quote + bridge) × N → outro
@@ -162,6 +323,7 @@ async function renderLongform(segments, outputPath, bgmPath) {
   const filterParts = [];
   const audioParts = [];
   let idx = 0;
+  const workDir = dirname(resolve(outputPath)); // caption textfiles live here
 
   const W = 1920, H = 1080; // 16:9 horizontal
   const FPS = 30;
@@ -214,16 +376,20 @@ async function renderLongform(segments, outputPath, bgmPath) {
     filterParts.push(
       `[fgsrc${i}]scale=${W}:${H}:force_original_aspect_ratio=decrease:flags=lanczos[fg${i}]`
     );
+    const textFilters = segmentTextFilters(s, i, workDir, hold, H);
     filterParts.push(
       `[bg${i}][fg${i}]overlay=(W-w)/2:(H-h)/2:format=auto,`
       + `eq=contrast=1.05:saturation=1.02,`
       + `drawbox=x=0:y=0:w=iw:h=ih:color=black@0.34:t=fill,`
-      + `setsar=1,setpts=PTS-STARTPTS[v${i}]`
+      + `setsar=1,setpts=PTS-STARTPTS`
+      + (textFilters.length ? `,${textFilters.join(',')}` : '')
+      + `[v${i}]`
     );
 
     audioParts.push(`[${idx + 1}:a]`);
     idx += 2;
   }
+
 
   // BGM
   const hasBGM = bgmPath && existsSync(bgmPath);
@@ -249,13 +415,34 @@ async function renderLongform(segments, outputPath, bgmPath) {
   filterParts.push(`${aLabels}concat=n=${segments.length}:v=0:a=1[voice]`);
 
   if (hasBGM) {
-    // Fade the bed out relative to the real runtime, not a hardcoded 170s.
-    const total = segments.reduce((n, s) => n + (s.duration || 8), 0);
+    // Real file duration accounts for N-1 crossfade overlaps that each consume
+    // XFADE seconds. Without this correction the fade-out started past the end
+    // of the actual file and was never heard (BUG 2).
+    const realDuration = segments.reduce((n, s) => n + (s.duration || 8), 0)
+      - XFADE * Math.max(0, segments.length - 1);
+
+    // assets/bgm.mp3 is exactly 30.00s with baked-in fades: a 3s fade-in at the
+    // head and a fade-out starting at ~26s. Trim to the flat interior [3.0,26.0]
+    // before looping so the splice is level-matched (BUG 1).
+    //
+    // ponytail: static gain replaces loudnorm. The asset is a flat -45.9 dBFS
+    // bed; loudnorm's sliding window introduced dips at loop seams because its
+    // internal state could not distinguish a splice from a dynamic change.
+    // A static boost is invisible to the loop. Ceiling: if the asset changes,
+    // re-measure and update the gain. Upgrade path: pre-render a seamless bed.
+    const BGM_LOOP_IN = 3.0;   // measured: steady-state (-45.9 dBFS) begins here
+    const BGM_LOOP_OUT = 26.0; // measured: fade-out begins at 26.1s
+    const BGM_GAIN_DB = 8;     // -45.9 + 8 = -37.9 dBFS final (under narration)
+    const loopBody = BGM_LOOP_OUT - BGM_LOOP_IN; // 23s
+    const loopCount = Math.ceil(realDuration / loopBody); // finite; atrim caps
     filterParts.push(
-      `[${idx}:a]volume=0.08,afade=t=in:st=0:d=3,`
-      + `afade=t=out:st=${Math.max(0, total - 8).toFixed(2)}:d=8[bgm]`
+      `[${idx}:a]atrim=start=${BGM_LOOP_IN}:end=${BGM_LOOP_OUT},asetpts=N/SR,`
+      + `aloop=loop=${loopCount}:size=2147483647,asetpts=N/SR,`
+      + `atrim=start=0:end=${realDuration.toFixed(2)},volume=${BGM_GAIN_DB}dB,`
+      + `afade=t=in:st=0:d=3,`
+      + `afade=t=out:st=${Math.max(0, realDuration - 8).toFixed(2)}:d=8[bgm]`
     );
-    filterParts.push(`[voice][bgm]amix=inputs=2:duration=first:dropout_transition=3[aout]`);
+    filterParts.push(`[voice][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]`);
   } else {
     filterParts.push(`[voice]anull[aout]`);
   }
@@ -277,6 +464,7 @@ async function renderLongform(segments, outputPath, bgmPath) {
   if (!existsSync(resolve(outputPath))) throw new Error(`No output at ${outputPath}`);
   return outputPath;
 }
+
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
@@ -320,49 +508,56 @@ async function main() {
     const introPath = join(compDir, 'intro.mp3');
     await generateVoiceover(script.videoIntro, introPath, narrationVoice);
     const introDur = await getAudioDuration(introPath);
-    segments.push({ audioPath: introPath, duration: introDur, type: 'intro' });
+    segments.push({ audioPath: introPath, duration: introDur, type: 'intro', caption: script.videoIntro });
 
-    // Each quote: setup narration → the quote → bridge narration
+
+    // Each quote: setup narration → the quote → bridge narration.
+    // The rank number is attached HERE, where `i` is the real quote index.
+    // Deriving it from the segment index (floor(i/3)) drifts by one for every
+    // later segment whenever the model omits an intro or a bridge, and puts a
+    // bridge on the NEXT quote's number even in the fully populated case.
     for (let i = 0; i < quotes.length; i++) {
       const q = quotes[i];
       const qs = script.quotes?.[i] || {};
+      const tag = { quoteIndex: i, quoteNumber: i + 1, character: q.character, anime: q.anime, quoteText: q.quote };
 
       // Setup narration
       if (qs.intro) {
         const setupPath = join(compDir, `setup-${i}.mp3`);
         await generateVoiceover(qs.intro, setupPath, narrationVoice);
-        segments.push({ audioPath: setupPath, duration: await getAudioDuration(setupPath), type: 'setup' });
+        segments.push({ audioPath: setupPath, duration: await getAudioDuration(setupPath), type: 'setup', caption: qs.intro, ...tag });
       }
 
       // The quote itself — in the character's voice
       const quotePath = join(compDir, `quote-${i}.mp3`);
       const quoteVoice = selectVoice(q.gender, q.mood);
       await generateVoiceover(q.quote, quotePath, quoteVoice);
-      segments.push({ audioPath: quotePath, duration: await getAudioDuration(quotePath), type: 'quote' });
+      segments.push({ audioPath: quotePath, duration: await getAudioDuration(quotePath), type: 'quote', caption: `"${q.quote}"`, ...tag });
 
       // Bridge to next (not on last quote)
       if (qs.bridge && i < quotes.length - 1) {
         const bridgePath = join(compDir, `bridge-${i}.mp3`);
         await generateVoiceover(qs.bridge, bridgePath, narrationVoice);
-        segments.push({ audioPath: bridgePath, duration: await getAudioDuration(bridgePath), type: 'bridge' });
+        segments.push({ audioPath: bridgePath, duration: await getAudioDuration(bridgePath), type: 'bridge', caption: qs.bridge, ...tag });
       }
     }
 
     // Video outro
     const outroPath = join(compDir, 'outro.mp3');
     await generateVoiceover(script.videoOutro, outroPath, narrationVoice);
-    segments.push({ audioPath: outroPath, duration: await getAudioDuration(outroPath), type: 'outro' });
+    segments.push({ audioPath: outroPath, duration: await getAudioDuration(outroPath), type: 'outro', caption: script.videoOutro });
 
     const totalDuration = segments.reduce((n, s) => n + s.duration, 0);
     console.log(`\n  Total duration: ${totalDuration.toFixed(1)}s (${(totalDuration / 60).toFixed(1)} min)`);
     console.log(`  Segments: ${segments.length}`);
+
 
     // 3. Fetch images for each segment.
     //    Anime and character are passed through so the art search hits anime
     //    sources; with only a prose imageQuery it falls back to stock photos.
     console.log('\n  Fetching images...');
     const imageQueries = segments.map((s, i) => {
-      const qi = Math.min(Math.floor(i / 3), quotes.length - 1);
+      const qi = Math.min(s.quoteIndex ?? Math.floor(i / 3), quotes.length - 1);
       const q = quotes[qi] || {};
       if (s.type === 'intro') {
         return { anime: quotes[0]?.anime, imageQuery: 'dramatic anime landscape dark cinematic' };
@@ -403,6 +598,7 @@ async function main() {
     } catch (err) {
       console.warn(`  ⚠ Thumbnail build failed, publishing without one: ${err.message}`);
     }
+
 
     // 6. Upload
     if (!previewMode) {
