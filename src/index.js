@@ -19,7 +19,7 @@ import { generateScript, generateTopicScript } from './generate-script.js';
 import { fetchAllImages } from './fetch-images.js';
 import { generateVoiceover, getAudioDuration } from './voiceover.js';
 import { buildAnimeComposition } from './compose-anime.js';
-import { uploadToYouTube } from './youtube-upload.js';
+import { uploadToYouTube, postPinnedComment, addToPlaylist } from './youtube-upload.js';
 import { markSeen } from './seen-store.js';
 import { getSubGoal } from './sub-count.js';
 import { transcribeAllScenes } from './transcribe.js';
@@ -177,6 +177,27 @@ async function processTopic(topic, subGoal) {
       if (!videoId) throw new Error('upload failed — topic left unseen for retry');
 
       markSeen(topic.id, topic.title);
+
+      // Engagement boosters — pinned comment + playlist grouping
+      const commentTexts = [
+        'Which anime moment hits you the hardest? Drop it below 👇🔥',
+        'Name an anime quote that changed your life 👇',
+        'Who said it better? Comment your pick 🔥',
+        'This one hit different... what anime moment broke you? 👇',
+        'Drop your favorite anime in the comments 👇🔥',
+      ];
+      const comment = commentTexts[Math.floor(Math.random() * commentTexts.length)];
+      await postPinnedComment(videoId, comment).catch(() => {});
+
+      // Group into playlist by anime name (viewers binge 3-4 = watch time signal)
+      if (topic.anime) {
+        await addToPlaylist(videoId, `${topic.anime} Shorts`).catch(() => {});
+      } else if (topic.type === 'ranking') {
+        await addToPlaylist(videoId, 'Anime Rankings').catch(() => {});
+      } else if (topic.type === 'news') {
+        await addToPlaylist(videoId, 'Anime News').catch(() => {});
+      }
+
       const row = [
         new Date().toISOString(),
         topic.id,

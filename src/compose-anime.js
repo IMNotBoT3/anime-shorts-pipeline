@@ -118,6 +118,7 @@ export function buildAnimeComposition({ scenes, topic, subGoal, outputDir }) {
           ${words.map((word, wi) => `<span class="word" id="w-${i}-${wi}">${escapeHtml(word)}</span>`).join('')}
         </div>
         ${i === 0 ? `<div class="badge" id="badge">${escapeHtml(badgeText)}</div>` : ''}
+        ${i === 0 ? `<div class="hook-text" id="hook-text">${escapeHtml(scene.words.slice(0, 8).map(w => w.text).join(' '))}</div>` : ''}
         <audio src="${scene.audioName}" data-start="${scene.start.toFixed(3)}"></audio>
       </section>`;
   }).join('\n');
@@ -180,6 +181,13 @@ export function buildAnimeComposition({ scenes, topic, subGoal, outputDir }) {
   const badgeTween = `
     tl.fromTo("#badge", { x: -300, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power4.out" }, 0.05);
     tl.to("#badge", { x: 300, opacity: 0, duration: 0.35, ease: "power3.in" }, ${Math.min(processedScenes[0].duration - 0.5, 2.5).toFixed(2)});`;
+
+  // Hook text — appears INSTANTLY on frame 1 (before voice starts), fades as
+  // the karaoke captions take over. This is the thumb-stopper: bold text visible
+  // in the first 0.3s while the viewer is deciding whether to swipe.
+  const hookTween = `
+    tl.fromTo("#hook-text", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.25, ease: "power3.out" }, 0.05);
+    tl.to("#hook-text", { opacity: 0, y: -30, duration: 0.5, ease: "power2.in" }, ${Math.min(processedScenes[0].duration * 0.6, 3.5).toFixed(2)});`;
 
   // Progress bar
   const progressTween = `
@@ -254,6 +262,20 @@ export function buildAnimeComposition({ scenes, topic, subGoal, outputDir }) {
       backdrop-filter: blur(4px);
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
       z-index: 50;
+      animation: pulse-glow 8s ease-in-out infinite;
+    }
+    @keyframes pulse-glow {
+      0%, 80%, 100% { box-shadow: 0 4px 20px rgba(0,0,0,0.5); transform: translateX(-50%) scale(1); }
+      85% { box-shadow: 0 4px 30px rgba(230,57,70,0.6); transform: translateX(-50%) scale(1.05); }
+      90% { box-shadow: 0 4px 20px rgba(0,0,0,0.5); transform: translateX(-50%) scale(1); }
+    }
+    .hook-text {
+      position: absolute; top: 35%; left: 48px; right: 48px;
+      text-align: center; font-size: 52px; font-weight: 900;
+      color: #fff; text-transform: uppercase; line-height: 1.15;
+      text-shadow: 0 4px 40px rgba(0,0,0,0.95), 0 2px 4px rgba(0,0,0,0.9);
+      opacity: 0; z-index: 40;
+      will-change: transform, opacity;
     }
     .progress-track { position: absolute; top: 0; left: 0; right: 0; height: 5px; background: rgba(255,255,255,0.15); z-index: 100; }
     .progress-bar { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: ${ACCENT}; transform-origin: left center; transform: scaleX(0); }
@@ -266,13 +288,14 @@ ${clips}
     <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
     <div class="flash" id="flash"></div>
     <div class="watermark">Anime Resonance</div>
-${subGoal?.text ? `    <div class="sub-goal">${escapeHtml(subGoal.text)} &#127919; Subscribe</div>` : ''}
+${subGoal?.text ? `    <div class="sub-goal">${subGoal.count} fans and counting \u{2014} join us &#127919;</div>` : ''}
   </div>
   <script>
     window.__timelines = window.__timelines || {};
     const tl = gsap.timeline({ paused: true });
 ${progressTween}
 ${badgeTween}
+${hookTween}
 ${tweens}
 ${flashTweens}
     window.__timelines["main"] = tl;

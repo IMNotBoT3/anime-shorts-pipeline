@@ -86,6 +86,12 @@ End with a line that creates the loop moment — something that reframes the quo
 hearing it again hits differently. The best outros make the intro feel like foreshadowing.
 Example: "Some battles are fought not with fists, but with the words you refuse to let die inside you. And maybe... that voice is yours."
 
+MANDATORY: The outro MUST end with a subscribe CTA. The LAST sentence must be one of:
+- "Subscribe for more powerful anime moments."
+- "Follow Anime Resonance for daily quotes that hit different."
+- "Subscribe — we find these moments so you never miss them."
+Do NOT skip this. Every successful anime channel verbally asks for the subscribe.
+
 ═══ imageQuery per scene ═══
 Each scene needs a search query for a dramatic background:
 - Scene 1: moody cinematic landscape or dark dramatic sky matching the emotional tone
@@ -225,6 +231,8 @@ or emotional tension that makes swiping feel like missing out.
 Each scene needs:
 - narration: the spoken text (10-25 words)
 - imageQuery: a search query for the background (specific anime characters/scenes, NOT generic)
+
+MANDATORY: The LAST scene's narration MUST end with a subscribe CTA like "Subscribe for more" or "Follow Anime Resonance for daily anime content." Every successful channel verbally asks.
 
 YOUTUBE METADATA:
 - title: under 70 chars, includes #shorts, hooks curiosity
